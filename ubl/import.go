@@ -20,12 +20,9 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 	if !ok {
 		return nil
 	}
-	if inv.Tax == nil {
-		inv.Tax = new(bill.Tax)
-	}
 	importDocumentType(in, inv)
 	if in.ProfileID != nil && in.ProfileID.Value != "" {
-		inv.Tax.Ext = inv.Tax.Ext.Set(eracun.ExtKeyProcess, cbc.Code(in.ProfileID.Value))
+		setTaxExt(inv, eracun.ExtKeyProcess, cbc.Code(in.ProfileID.Value))
 	}
 	importOperator(in, inv)
 	importPaymentMeansText(in, inv)
@@ -55,22 +52,27 @@ func importDocumentType(in *goblubl.Invoice, inv *bill.Invoice) {
 		code = in.CreditNoteTypeCode
 	}
 	if code != nil && code.Value != "" {
-		inv.Tax.Ext = inv.Tax.Ext.Set(untdid.ExtKeyDocumentType, cbc.Code(code.Value))
+		setTaxExt(inv, untdid.ExtKeyDocumentType, cbc.Code(code.Value))
 	}
 }
 
 // importOperator adds the operator from the SellerContact to the supplier's
 // people: the OIB goes to the person gobl.ubl read from the party contact
-// (BG-6) when the names match, or to a new person.
+// (BG-6) when the names match, or to a new person. A SellerContact without
+// an ID or a name adds nobody, so that the missing operator is the fault.
 func importOperator(in *goblubl.Invoice, inv *bill.Invoice) {
 	sc := in.AccountingSupplierParty.SellerContact
 	if sc == nil || sc.ID == nil || sc.Name == nil || inv.Supplier == nil {
 		return
 	}
-	id := &org.Identity{Type: hr.IdentityTypeOIB, Code: cbc.Code(*sc.ID)}
-	name := *sc.Name
+	oib := goblubl.CleanString(*sc.ID)
+	name := goblubl.CleanString(*sc.Name)
+	if oib == "" || name == "" {
+		return
+	}
+	id := &org.Identity{Type: hr.IdentityTypeOIB, Code: cbc.Code(oib)}
 	for _, p := range inv.Supplier.People {
-		if p != nil && p.Name != nil && personName(p.Name) == name {
+		if p != nil && eracun.OperatorName(p.Name) == name {
 			p.Identities = org.AddIdentity(p.Identities, id)
 			return
 		}
@@ -103,11 +105,7 @@ func importPaymentMeansText(in *goblubl.Invoice, inv *bill.Invoice) {
 // document level charges that carry an amount collected for a third party.
 // The other categories follow from the tax key and rate.
 func importPassThroughTaxCategories(in *goblubl.Invoice, inv *bill.Invoice) {
-	lines := in.InvoiceLines
-	if len(in.CreditNoteLines) > 0 {
-		lines = in.CreditNoteLines
-	}
-	for i, l := range lines {
+	for i, l := range ublLines(in) {
 		if i >= len(inv.Lines) || inv.Lines[i] == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
 			continue
 		}
@@ -127,10 +125,6 @@ func importPassThroughTaxCategories(in *goblubl.Invoice, inv *bill.Invoice) {
 // (HR-BT-13), in its item's, when the export would not write it back from the
 // VAT note for its category.
 const MetaKeyTaxExemptionReason cbc.Key = "hr-eracun-tax-exemption-reason"
-
-// exemptTaxCategories are the EN 16931 VAT categories that have exemption
-// reasons.
-var exemptTaxCategories = []cbc.Code{"E", "AE", "K", "G", "O"}
 
 // importChargeExemptionReasons keeps the exemption reasons of the document
 // level charges and allowances that the VAT notes don't give back. GOBL has
@@ -160,11 +154,7 @@ func importChargeExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
 // the VAT notes don't give back. The export only writes the note's text for
 // categories E and O (HR-BR-16, HR-BR-36).
 func importLineExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
-	lines := in.InvoiceLines
-	if len(in.CreditNoteLines) > 0 {
-		lines = in.CreditNoteLines
-	}
-	for i, l := range lines {
+	for i, l := range ublLines(in) {
 		if i >= len(inv.Lines) || inv.Lines[i] == nil || inv.Lines[i].Item == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
 			continue
 		}
@@ -177,38 +167,10 @@ func importLineExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
 		if reason == "" {
 			continue
 		}
-		if n := taxNote(inv, tc.Ext); n != nil && n.Text == reason && tc.Ext.Get(untdid.ExtKeyTaxCategory).In("E", "O") {
+		if n := taxNote(inv, tc.Ext); n != nil && n.Text == reason && tc.Ext.Get(untdid.ExtKeyTaxCategory).In(reasonRequiredCategories...) {
 			continue
 		}
 		setMeta(&inv.Lines[i].Item.Meta, MetaKeyTaxExemptionReason, reason)
-	}
-}
-
-func setMeta(meta *cbc.Meta, key cbc.Key, value string) {
-	if *meta == nil {
-		*meta = make(cbc.Meta)
-	}
-	(*meta)[key] = value
-}
-
-// documentCharges calls fn with each document level charge and allowance of
-// the UBL invoice, and the taxes and meta data of the GOBL charge or discount
-// gobl.ubl read it into, in order.
-func documentCharges(in *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta)) {
-	var charges, discounts int
-	for i := range in.AllowanceCharge {
-		ac := &in.AllowanceCharge[i]
-		if ac.ChargeIndicator {
-			if charges < len(inv.Charges) && inv.Charges[charges] != nil {
-				fn(ac, inv.Charges[charges].Taxes, &inv.Charges[charges].Meta)
-			}
-			charges++
-			continue
-		}
-		if discounts < len(inv.Discounts) && inv.Discounts[discounts] != nil {
-			fn(ac, inv.Discounts[discounts].Taxes, &inv.Discounts[discounts].Meta)
-		}
-		discounts++
 	}
 }
 

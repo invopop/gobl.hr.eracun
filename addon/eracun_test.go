@@ -99,6 +99,7 @@ func TestInvoiceRules(t *testing.T) {
 		{"process P99 without label", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(eracun.ExtKeyProcess, "P99") }, "GOBL-HR-ERACUN-BILL-INVOICE-04"},
 		{"supplier without endpoint", func(inv *bill.Invoice) { inv.Supplier.TaxID = &tax.Identity{Country: "HR"} }, "GOBL-HR-ERACUN-BILL-INVOICE-05"},
 		{"no operator", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
+		{"operator without a name", func(inv *bill.Invoice) { inv.Supplier.People[0].Name = &org.Name{} }, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
 		{"operator key without OIB", func(inv *bill.Invoice) {
 			inv.Supplier.People = append(inv.Supplier.People, &org.Person{Key: eracun.PersonKeyOperator, Name: &org.Name{Given: "Operater2"}})
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
@@ -202,8 +203,21 @@ func TestOperator(t *testing.T) {
 		Name:       &org.Name{Given: "Operater1"},
 		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
 	}
-	assert.Same(t, operator, eracun.Operator([]*org.Person{nil, contact, operator}))
+	unnamed := &org.Person{
+		Name:       &org.Name{},
+		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
+	}
+	assert.Same(t, operator, eracun.Operator([]*org.Person{nil, contact, unnamed, operator}))
 	assert.Nil(t, eracun.Operator([]*org.Person{contact}))
+	assert.Nil(t, eracun.Operator([]*org.Person{unnamed}))
+}
+
+func TestOperatorName(t *testing.T) {
+	assert.Equal(t, "Blagajna 1", eracun.OperatorName(&org.Name{Given: "Ivan", Surname: "Kovač", Alias: "Blagajna 1"}))
+	assert.Equal(t, "Ivan Kovač", eracun.OperatorName(&org.Name{Given: "Ivan", Surname: "Kovač"}))
+	assert.Equal(t, "Ivan", eracun.OperatorName(&org.Name{Given: "Ivan"}))
+	assert.Equal(t, "Kovač", eracun.OperatorName(&org.Name{Surname: "Kovač"}))
+	assert.Empty(t, eracun.OperatorName(nil))
 }
 
 func testStatus() *bill.Status {

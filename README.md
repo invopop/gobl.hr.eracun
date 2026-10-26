@@ -91,7 +91,7 @@ Tax Administration's schematron, which the tests run (see below).
 
 | Module | Waits for | Pin |
 | --- | --- | --- |
-| `github.com/invopop/gobl` | the `hr` regime ([invopop/gobl#724](https://github.com/invopop/gobl/pull/724)) | the gobl release that includes it, or a `main` pseudo-version after merge |
+| `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite of [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) on the Slovakia template; PR pending) | the gobl release that includes it, or a `main` pseudo-version after merge |
 | `github.com/invopop/gobl.ubl` | the generic fields the HR format uses (`SellerContact`, tax category `Name`, raw `ExtensionContent`) | the gobl.ubl release that includes them |
 
 Add the `release.yaml` workflow of the other GOBL modules at the same time:

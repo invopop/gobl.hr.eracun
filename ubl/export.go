@@ -2,11 +2,11 @@ package ubl
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/invopop/gobl"
 	eracun "github.com/invopop/gobl.hr.eracun/addon"
 	goblubl "github.com/invopop/gobl.ubl"
+	"github.com/invopop/gobl/addons/eu/en16931"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/catalogues/cef"
 	"github.com/invopop/gobl/catalogues/untdid"
@@ -27,14 +27,6 @@ var passThroughTaxSchemes = map[cbc.Code]string{
 	eracun.TaxCategoryPOVNAK: "OTH",
 	eracun.TaxCategoryPPMV:   "CAR",
 	eracun.TaxCategoryN:      goblubl.TaxSchemeVAT,
-}
-
-// invoices provides the GOBL and UBL invoices of an export or import, if
-// both are invoices.
-func invoices(env *gobl.Envelope, doc goblubl.Document) (*bill.Invoice, *goblubl.Invoice, bool) {
-	inv, ok := env.Extract().(*bill.Invoice)
-	out, ok2 := doc.(*goblubl.Invoice)
-	return inv, out, ok && ok2
 }
 
 // exportHR applies the HR CIUS rules to an exported invoice.
@@ -141,18 +133,11 @@ func exportSellerContact(inv *bill.Invoice, out *goblubl.Invoice) {
 		return
 	}
 	oib := id.Code.String()
-	name := personName(op.Name)
+	name := eracun.OperatorName(op.Name)
 	out.AccountingSupplierParty.SellerContact = &goblubl.Contact{
 		ID:   &oib,
 		Name: &name,
 	}
-}
-
-func personName(n *org.Name) string {
-	if n.Alias != "" {
-		return n.Alias
-	}
-	return strings.TrimSpace(n.Given + " " + n.Surname)
 }
 
 // exportSellerContactPoint keeps a person with the operator key out of the
@@ -238,10 +223,7 @@ func removeOrderReferenceFiller(inv *bill.Invoice, out *goblubl.Invoice) {
 // exemption reason the HR CIUS requires for E and O lines (HR-BR-16,
 // HR-BR-36).
 func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
-	lines := out.InvoiceLines
-	if len(out.CreditNoteLines) > 0 {
-		lines = out.CreditNoteLines
-	}
+	lines := ublLines(out)
 	for i, l := range inv.Lines {
 		if i >= len(lines) || l == nil || lines[i].Item == nil || lines[i].Item.ClassifiedTaxCategory == nil {
 			continue
@@ -252,7 +234,7 @@ func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 		}
 		ctc := lines[i].Item.ClassifiedTaxCategory
 		ctc.Name = taxCategoryName(tc.Ext)
-		if tc.Ext.Get(untdid.ExtKeyTaxCategory).In("E", "O") {
+		if tc.Ext.Get(untdid.ExtKeyTaxCategory).In(reasonRequiredCategories...) {
 			if v := tc.Ext.Get(cef.ExtKeyVATEX).String(); v != "" {
 				ctc.TaxExemptionReasonCode = &v
 			}
@@ -270,7 +252,7 @@ func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 // line or charge, if its VAT category is one that has exemption reasons.
 func keptExemptionReason(meta cbc.Meta, ext tax.Extensions) (string, bool) {
 	reason, ok := meta[MetaKeyTaxExemptionReason]
-	if !ok || !ext.Get(untdid.ExtKeyTaxCategory).In(exemptTaxCategories...) {
+	if !ok || !ext.Get(untdid.ExtKeyTaxCategory).In(reasonAllowedCategories...) {
 		return "", false
 	}
 	return reason, true
@@ -278,37 +260,23 @@ func keptExemptionReason(meta cbc.Meta, ext tax.Extensions) (string, bool) {
 
 // exportChargeTaxCategories names the tax category of each document level
 // charge and allowance (HR-BR-11), and writes back an exemption reason kept
-// on import (HR-BT-7). gobl.ubl writes the charges first.
+// on import (HR-BT-7).
 func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
-	type charge struct {
-		taxes tax.Set
-		meta  cbc.Meta
-	}
-	var charges []charge
-	for _, c := range inv.Charges {
-		charges = append(charges, charge{c.Taxes, c.Meta})
-	}
-	for _, d := range inv.Discounts {
-		charges = append(charges, charge{d.Taxes, d.Meta})
-	}
-	for i, c := range charges {
-		if i >= len(out.AllowanceCharge) {
-			break
-		}
-		tc := c.taxes.Get(tax.CategoryVAT)
+	documentCharges(out, inv, func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta) {
+		tc := ts.Get(tax.CategoryVAT)
 		if tc == nil {
-			continue
+			return
 		}
-		for _, cat := range out.AllowanceCharge[i].TaxCategory {
-			if cat.TaxScheme == nil || cat.TaxScheme.ID.Value != goblubl.TaxSchemeVAT {
+		for _, cat := range ac.TaxCategory {
+			if cat == nil || cat.TaxScheme == nil || cat.TaxScheme.ID.Value != goblubl.TaxSchemeVAT {
 				continue
 			}
 			cat.Name = taxCategoryName(tc.Ext)
-			if reason, ok := keptExemptionReason(c.meta, tc.Ext); ok {
+			if reason, ok := keptExemptionReason(*meta, tc.Ext); ok {
 				cat.TaxExemptionReason = &reason
 			}
 		}
-	}
+	})
 }
 
 func taxCategoryName(ext tax.Extensions) *string {
@@ -318,21 +286,6 @@ func taxCategoryName(ext tax.Extensions) *string {
 	}
 	n := taxCategoryPrefix + c.String()
 	return &n
-}
-
-// taxNote provides the VAT note with the exemption reason of the EN 16931
-// tax category, the way gobl.ubl finds it for the tax breakdown.
-func taxNote(inv *bill.Invoice, ext tax.Extensions) *tax.Note {
-	if inv.Tax == nil {
-		return nil
-	}
-	cat := ext.Get(untdid.ExtKeyTaxCategory)
-	for _, n := range inv.Tax.Notes {
-		if n != nil && n.Category == tax.CategoryVAT && cat != cbc.CodeEmpty && n.Ext.Get(untdid.ExtKeyTaxCategory) == cat {
-			return n
-		}
-	}
-	return nil
 }
 
 // exportHRFISK20Data adds the HR extension data: the cash basis VAT flag,
@@ -361,7 +314,7 @@ func vatTotal(inv *bill.Invoice) *tax.CategoryTotal {
 
 func hasExemptRate(vat *tax.CategoryTotal) bool {
 	for _, r := range vat.Rates {
-		if r.Ext.Get(untdid.ExtKeyTaxCategory) == "E" {
+		if r.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryExempt {
 			return true
 		}
 	}
@@ -389,19 +342,19 @@ func hrTotals(inv *bill.Invoice, vat *tax.CategoryTotal) (*HRTaxTotal, *HRLegalM
 			HRTaxScheme: HRTaxScheme{ID: goblubl.TaxSchemeVAT},
 		}
 		if scheme, ok := passThroughTaxSchemes[label]; ok {
-			cat.ID = "O"
+			cat.ID = en16931.TaxCategoryOutsideScope.String()
 			cat.HRTaxScheme.ID = scheme
 		} else {
 			if r.Percent != nil {
 				cat.Percent = r.Percent.StringWithoutSymbol()
 			}
-			if cat.ID == "E" {
+			if cat.ID == en16931.TaxCategoryExempt.String() {
 				if n := taxNote(inv, r.Ext); n != nil {
 					cat.TaxExemptionReason = n.Text
 				}
 			}
 		}
-		if cat.ID == "O" {
+		if cat.ID == en16931.TaxCategoryOutsideScope.String() {
 			outOfScope = outOfScope.Add(r.Base)
 		}
 		taxAmount = taxAmount.Add(r.Amount)

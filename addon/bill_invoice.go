@@ -1,6 +1,9 @@
 package eracun
 
 import (
+	"strings"
+
+	"github.com/invopop/gobl/addons/eu/en16931"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
 	"github.com/invopop/gobl/catalogues/iso"
@@ -33,8 +36,12 @@ var kpdExemptDocumentTypes = []cbc.Code{
 }
 
 // buyerVATTaxCategories are the EN 16931 tax categories that require the
-// buyer's VAT identifier (HR-BR-S-1 to HR-BR-AE-3).
-var buyerVATTaxCategories = []cbc.Code{"S", "Z", "E", "AE"}
+// buyer's VAT identifier, on a line, a document level discount or a document
+// level charge alike (HR-BR-S-1 to HR-BR-AE-3).
+var buyerVATTaxCategories = []cbc.Code{
+	en16931.TaxCategoryStandard, en16931.TaxCategoryZero,
+	en16931.TaxCategoryExempt, en16931.TaxCategoryReverseCharge,
+}
 
 func normalizeInvoice(inv *bill.Invoice) {
 	if inv == nil {
@@ -101,9 +108,9 @@ func billInvoiceRules() *rules.Set {
 		rules.When(is.Func("has S, Z, E or AE taxes", invoiceNeedsBuyerVAT),
 			rules.Field("customer",
 				rules.Field("tax_id",
-					rules.Assert("09", "invoice customer tax ID is required for S, Z, E and AE taxes (HR-BR-S-1)", is.Present),
+					rules.Assert("09", "invoice customer tax ID is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					rules.Field("code",
-						rules.Assert("10", "invoice customer tax ID code is required for S, Z, E and AE taxes (HR-BR-S-1)", is.Present),
+						rules.Assert("10", "invoice customer tax ID code is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					),
 				),
 			),
@@ -154,7 +161,7 @@ const PersonKeyOperator cbc.Key = "operator"
 func Operator(people []*org.Person) *org.Person {
 	var first *org.Person
 	for _, p := range people {
-		if p == nil || p.Name == nil {
+		if p == nil || OperatorName(p.Name) == "" {
 			continue
 		}
 		if p.Key == PersonKeyOperator {
@@ -165,6 +172,18 @@ func Operator(people []*org.Person) *org.Person {
 		}
 	}
 	return first
+}
+
+// OperatorName provides the operator label (HR-BT-4) of a person: the alias,
+// or else the given name and surname.
+func OperatorName(n *org.Name) string {
+	if n == nil {
+		return ""
+	}
+	if n.Alias != "" {
+		return n.Alias
+	}
+	return strings.TrimSpace(n.Given + " " + n.Surname)
 }
 
 func invoiceNeedsBuyerVAT(val any) bool {

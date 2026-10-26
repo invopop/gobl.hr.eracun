@@ -179,6 +179,27 @@ func TestImportOperatorIsSellerContact(t *testing.T) {
 	assert.Same(t, inv.Supplier.People[0], eracun.Operator(inv.Supplier.People))
 }
 
+// TestImportOperatorEmptyID checks that a SellerContact whose ID carries no
+// text adds no operator, so the fault is the missing operator rather than
+// an identity with an empty code.
+func TestImportOperatorEmptyID(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV25.xml"))
+	require.NoError(t, err)
+	data = []byte(strings.Replace(string(data), "<cbc:ID>12345678903</cbc:ID>\n\t\t\t<cbc:Name>Operater1</cbc:Name>",
+		"<cbc:ID> </cbc:ID>\n\t\t\t<cbc:Name>Operater1</cbc:Name>", 1))
+	require.Contains(t, string(data), "<cbc:ID> </cbc:ID>")
+	doc, err := goblubl.Decode(data)
+	require.NoError(t, err)
+	env, err := goblubl.Import(doc)
+	require.NoError(t, err)
+	inv := env.Extract().(*bill.Invoice)
+	assert.Empty(t, inv.Supplier.People)
+	require.NoError(t, env.Calculate())
+	err = env.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GOBL-HR-ERACUN-BILL-INVOICE-06")
+}
+
 // TestMergedExemptionKeepsVATEX checks that joining the exempt entries of a
 // pass-through amount and an exempt supply keeps the VATEX code of either.
 func TestMergedExemptionKeepsVATEX(t *testing.T) {
