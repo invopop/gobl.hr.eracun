@@ -15,7 +15,9 @@ import (
 )
 
 // TestApplicationResponse round-trips the rejection example of the HR
-// application response specification, with placeholder OIBs.
+// application response specification, with placeholder OIBs, and checks the
+// export against the values the specification fixes. With -xsd the export
+// must also pass the UBL 2.1 schema.
 func TestApplicationResponse(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "hr-ar", "odbijanje.xml"))
 	require.NoError(t, err)
@@ -48,6 +50,10 @@ func TestApplicationResponse(t *testing.T) {
 	xmlPath := filepath.Join("testdata", "hr-ar", "out", "odbijanje.xml")
 	if *updateOut {
 		require.NoError(t, os.WriteFile(xmlPath, xmlData, 0644))
+	}
+	checkRejectionSpec(t, xmlData)
+	if *validateXSD {
+		validateSchema(t, xmlData)
 	}
 	expected, err = os.ReadFile(xmlPath)
 	require.NoError(t, err)

@@ -24,6 +24,10 @@ var updateOut = flag.Bool("update", false, "Update the expected output files in 
 // validate is a flag that enables schematron validation against phorm
 var validate = flag.Bool("validate", false, "Run phorm schematron validation on generated XML")
 
+// validateXSD is a flag that enables UBL 2.1 schema validation of the
+// generated application response, with xmllint in a container
+var validateXSD = flag.Bool("xsd", false, "Validate the generated application response against the UBL 2.1 schema (needs Docker)")
+
 // TestExamples round-trips the official HR CIUS examples in testdata/hr: each
 // one is imported into GOBL, which must pass the addon's rules, and exported
 // back to UBL. Both results are compared with the files in testdata/hr/out,
