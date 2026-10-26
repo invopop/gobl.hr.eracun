@@ -67,9 +67,7 @@ func addHRFISK20Data(out *goblubl.Invoice, data *HRFISK20Data) error {
 	if err != nil {
 		return err
 	}
-	out.AddExtension(&goblubl.Extension{
-		ExtensionContent: &goblubl.ExtensionContent{Raw: raw},
-	})
+	out.AddExtension(goblubl.NewRawExtension(raw))
 	return nil
 }
 
