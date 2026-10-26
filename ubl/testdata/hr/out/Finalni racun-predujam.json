@@ -1,0 +1,188 @@
+{
+	"$regime": "HR",
+	"$addons": [
+		"eu-en16931-v2017",
+		"hr-eracun-v1"
+	],
+	"uuid": "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a2",
+	"type": "standard",
+	"code": "25-1-1",
+	"issue_date": "2026-12-01",
+	"issue_time": "12:00:00",
+	"currency": "EUR",
+	"preceding": [
+		{
+			"issue_date": "2026-11-01",
+			"code": "18-1-1"
+		}
+	],
+	"tax": {
+		"rounding": "currency",
+		"ext": {
+			"hr-eracun-process": "P11",
+			"untdid-document-type": "380"
+		}
+	},
+	"supplier": {
+		"name": "TVRTKA A d.o.o.",
+		"tax_id": {
+			"country": "HR",
+			"code": "12345678903"
+		},
+		"people": [
+			{
+				"key": "operator",
+				"name": {
+					"given": "Operater1"
+				},
+				"identities": [
+					{
+						"type": "OIB",
+						"code": "12345678903"
+					}
+				]
+			}
+		],
+		"endpoints": [
+			{
+				"uri": "iso6523-actorid-upis::9934:12345678903"
+			}
+		],
+		"inboxes": [
+			{
+				"scheme": "9934",
+				"code": "12345678903"
+			}
+		],
+		"addresses": [
+			{
+				"street": "Ulica 1",
+				"locality": "ZAGREB",
+				"code": "10000",
+				"country": "HR"
+			}
+		]
+	},
+	"customer": {
+		"name": "Tvrtka B d.o.o.",
+		"tax_id": {
+			"country": "HR",
+			"code": "11111111119"
+		},
+		"endpoints": [
+			{
+				"uri": "iso6523-actorid-upis::9934:11111111119"
+			}
+		],
+		"inboxes": [
+			{
+				"scheme": "9934",
+				"code": "11111111119"
+			}
+		],
+		"addresses": [
+			{
+				"street": "Ulica 2",
+				"locality": "RIJEKA",
+				"code": "51000",
+				"country": "HR"
+			}
+		]
+	},
+	"lines": [
+		{
+			"i": 1,
+			"quantity": "1.000",
+			"item": {
+				"name": "Proizvod",
+				"identities": [
+					{
+						"label": "CG",
+						"code": "62.20.20"
+					}
+				],
+				"price": "1200.000000",
+				"unit": "piece",
+				"ext": {
+					"untdid-unit": "H87"
+				}
+			},
+			"sum": "1200.00",
+			"taxes": [
+				{
+					"cat": "VAT",
+					"key": "standard",
+					"percent": "25%",
+					"ext": {
+						"hr-eracun-tax-category": "PDV25",
+						"untdid-tax-category": "S"
+					}
+				}
+			],
+			"total": "1200.00"
+		}
+	],
+	"payment": {
+		"advances": [
+			{
+				"description": "Prepaid Amount",
+				"amount": "500.00"
+			}
+		],
+		"terms": {
+			"due_dates": [
+				{
+					"date": "2026-12-31",
+					"amount": "1000.00",
+					"percent": "100%"
+				}
+			]
+		},
+		"instructions": {
+			"key": "credit-transfer",
+			"detail": "Opis plaćanja",
+			"ref": "HR00 123456",
+			"credit_transfer": [
+				{
+					"iban": "HRXXXXXXXXXXXXXXXX"
+				}
+			],
+			"ext": {
+				"untdid-payment-means": "30"
+			}
+		}
+	},
+	"delivery": {
+		"date": "2026-09-25"
+	},
+	"totals": {
+		"sum": "1200.00",
+		"total": "1200.00",
+		"taxes": {
+			"categories": [
+				{
+					"code": "VAT",
+					"rates": [
+						{
+							"key": "standard",
+							"ext": {
+								"hr-eracun-tax-category": "PDV25",
+								"untdid-tax-category": "S"
+							},
+							"base": "1200.00",
+							"percent": "25%",
+							"amount": "300.00"
+						}
+					],
+					"amount": "300.00"
+				}
+			],
+			"sum": "300.00"
+		},
+		"tax": "300.00",
+		"total_with_tax": "1500.00",
+		"payable": "1500.00",
+		"advance": "500.00",
+		"due": "1000.00"
+	}
+}
