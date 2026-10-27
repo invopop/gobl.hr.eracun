@@ -115,13 +115,19 @@ Tax Administration's schematron, which the tests run (see below).
 ### Dependencies not yet released
 
 > **Before tagging or merging**, remove the `replace` block in `go.mod`. It
-> points at local checkouts, so the module builds only on a machine that has
-> them, and CI fails at `go mod download` until it is removed.
+> pins gobl and gobl.ubl to unreleased branch commits, through their
+> pseudo-versions, so that CI can build the module until those branches are
+> released.
 
-| Module | Waits for | Pin |
-| --- | --- | --- |
-| `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite of [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) on the Slovakia template; PR pending) | the gobl release that includes it, or a `main` pseudo-version after merge |
-| `github.com/invopop/gobl.ubl` | the generic fields the HR format uses (`SellerContact`, tax category `Name`, raw `ExtensionContent`) | the gobl.ubl release that includes them |
+| Module | Waits for | Replaced by | Pin |
+| --- | --- | --- | --- |
+| `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite of [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) on the Slovakia template; PR pending) | branch commit `70ccde1c` | the gobl release that includes it, or a `main` pseudo-version after merge |
+| `github.com/invopop/gobl.ubl` | the generic fields the HR format uses (`SellerContact`, tax category `Name`, raw `ExtensionContent`) (branch `eu3-18-hr-fields`) | branch commit `a45bc23` | the gobl.ubl release that includes them |
+
+To follow a newer commit of either branch, run for example
+`go mod edit -replace=github.com/invopop/gobl=github.com/invopop/gobl@<commit>`
+then `go mod tidy`. To work against local checkouts instead, point the
+`replace` at their paths, and don't commit that.
 
 Add the `release.yaml` workflow of the other GOBL modules at the same time:
 it tags every push to `main`, and a tag made while the `replace` block is in
