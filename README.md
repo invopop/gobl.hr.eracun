@@ -69,11 +69,40 @@ from gobl.ubl, or `convert.Import`/`convert.Export`.
 | Key | Description |
 | --- | --- |
 | `hr-eracun-process` | Business process (BT-23), written to the UBL `ProfileID`: `P1` to `P12`, or `P99:` followed by a label agreed with the buyer. |
-| `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`, `N`), which are set on an exempt combo. |
+| `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`) and any other non-taxable fee charged with taxable items (`N`), which are set on an exempt combo. |
 | `hr-eracun-rejection-reason` | Kind of reason for rejecting an invoice (AR-BT-12): `N`, `U` or `O`, the same code the buyer reports to the Tax Administration. |
 
-The invoice tag `cash-basis` marks VAT accounted for when the invoice is paid
-(`HRObracunPDVPoNaplati`).
+The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
+invoice is paid. The regime adds the legal VAT note, and the UBL export writes
+`HRObracunPDVPoNaplati`.
+
+## Operator
+
+An eRačun names its operator, the person who issued it: a label in
+`SellerContact/Name` (HR-BT-4) and their OIB in `SellerContact/ID` (HR-BT-5).
+The OIB is also reported to the Tax Administration when the invoice is
+fiscalized. Give the operator the `operator` key, a name and an `OIB` identity:
+
+```yaml
+supplier:
+  people:
+    - key: operator
+      name:
+        given: "Operater1"
+      identities:
+        - type: OIB
+          code: "12345678903"
+```
+
+An invoice with no person with the key, more than one, or an operator
+without a name or an OIB is rejected; no other person is taken in their place.
+Article 8(4) of the Fiscalisation Act lets the supplier's own OIB stand in for
+the operator's for a natural person's business, invoices issued through
+self-service devices, and other cases where the operator's OIB can't be given.
+In those cases, give the supplier's OIB as the operator's identity, as the
+examples do. The operator is not written as the seller's contact (BG-6).
+Correcting an invoice with GOBL leaves out the original operator, so the
+corrective document needs its own.
 
 ## Validation
 
@@ -172,6 +201,7 @@ service container, and the schema check.
 
 - [Porezna uprava - eRačun](https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/eracun)
 - [Specifikacija osnovne uporabe eRačuna s proširenjima](https://porezna.gov.hr/fiskalizacija/api/dokumenti/196) (HR CIUS 2025 and the national extension)
+- [Tehnička specifikacija: Fiskalizacija eRačuna i eIzvještavanje v1.15](https://porezna.gov.hr/fiskalizacija/api/dokumenti/186) (CIS fiscalization and eReporting, including the rejection reason codes)
 - [HR UBL schematron of 13.03.2026](https://porezna.gov.hr/fiskalizacija/api/dokumenti/197) (rules 1.0.4)
 - [Aplikacijski odgovor v1.1](https://porezna.gov.hr/fiskalizacija/api/dokumenti/206) (application response)
 

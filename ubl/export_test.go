@@ -30,7 +30,7 @@ func testInvoice() *bill.Invoice {
 	return &bill.Invoice{
 		Regime:    tax.WithRegime("HR"),
 		Addons:    tax.WithAddons(eracun.V1),
-		Tags:      tax.WithTags(eracun.TagCashBasis),
+		Tags:      tax.WithTags(hr.TagCashBasis),
 		Series:    "1-P1",
 		Code:      "2",
 		Currency:  "EUR",
@@ -51,6 +51,7 @@ func testInvoice() *bill.Invoice {
 			People: []*org.Person{
 				{Name: &org.Name{Given: "Ana", Surname: "Horvat"}},
 				{
+					Key:        eracun.PersonKeyOperator,
 					Name:       &org.Name{Given: "Ivan", Surname: "Kovač", Alias: "Blagajna 1"},
 					Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
 				},
@@ -153,7 +154,7 @@ func TestExportInvoice(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, env2.Validate())
 		inv := env2.Extract().(*bill.Invoice)
-		assert.True(t, inv.HasTags(eracun.TagCashBasis))
+		assert.True(t, inv.HasTags(hr.TagCashBasis))
 		assert.Equal(t, cbc.Code("P99:Narudzba"), inv.Tax.GetExt(eracun.ExtKeyProcess))
 		assert.Equal(t, eracun.TaxCategoryPP, inv.Charges[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
 		op := eracun.Operator(inv.Supplier.People)
@@ -163,7 +164,8 @@ func TestExportInvoice(t *testing.T) {
 }
 
 // TestImportOperatorIsSellerContact checks that an operator who is also the
-// seller contact (BG-6) stays one person.
+// seller contact (BG-6) is read as two people, the contact and the person
+// with the operator key, so that the export writes both back.
 func TestImportOperatorIsSellerContact(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV25.xml"))
 	require.NoError(t, err)
@@ -175,8 +177,39 @@ func TestImportOperatorIsSellerContact(t *testing.T) {
 	env, err := goblubl.Import(doc)
 	require.NoError(t, err)
 	inv := env.Extract().(*bill.Invoice)
-	require.Len(t, inv.Supplier.People, 1)
-	assert.Same(t, inv.Supplier.People[0], eracun.Operator(inv.Supplier.People))
+	require.Len(t, inv.Supplier.People, 2)
+	assert.Empty(t, inv.Supplier.People[0].Key)
+	assert.Same(t, inv.Supplier.People[1], eracun.Operator(inv.Supplier.People))
+
+	require.NoError(t, env.Calculate())
+	require.NoError(t, env.Validate())
+	out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+	require.NoError(t, err)
+	party := out.(*goblubl.Invoice).AccountingSupplierParty
+	require.NotNil(t, party.Party.Contact)
+	assert.Equal(t, "Operater1", *party.Party.Contact.Name)
+	assert.Equal(t, "12345678903", *party.SellerContact.ID)
+	assert.Equal(t, "Operater1", *party.SellerContact.Name)
+}
+
+// TestImportOperatorVATPrefix checks that an operator OIB with the HR prefix
+// of the VAT number, which HR-BR-9 accepts, is read as the bare OIB.
+func TestImportOperatorVATPrefix(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV25.xml"))
+	require.NoError(t, err)
+	data = []byte(strings.Replace(string(data), "<cbc:ID>12345678903</cbc:ID>\n\t\t\t<cbc:Name>Operater1</cbc:Name>",
+		"<cbc:ID>HR12345678903</cbc:ID>\n\t\t\t<cbc:Name>Operater1</cbc:Name>", 1))
+	require.Contains(t, string(data), "<cbc:ID>HR12345678903</cbc:ID>")
+	doc, err := goblubl.Decode(data)
+	require.NoError(t, err)
+	env, err := goblubl.Import(doc)
+	require.NoError(t, err)
+	inv := env.Extract().(*bill.Invoice)
+	op := eracun.Operator(inv.Supplier.People)
+	require.NotNil(t, op)
+	assert.Equal(t, cbc.Code("12345678903"), op.Identities[0].Code)
+	require.NoError(t, env.Calculate())
+	require.NoError(t, env.Validate())
 }
 
 // TestImportOperatorEmptyID checks that a SellerContact whose ID carries no
@@ -295,6 +328,33 @@ func TestPaymentMeansText(t *testing.T) {
 	inv2 := env.Extract().(*bill.Invoice)
 	require.NotNil(t, inv2.Payment.Instructions)
 	assert.Equal(t, "Virman", inv2.Payment.Instructions.Detail)
+}
+
+// TestExportRequiresOperator checks that an invoice that skipped validation
+// is refused rather than written without the operator (HR-BR-9, HR-BR-37).
+func TestExportRequiresOperator(t *testing.T) {
+	tests := []struct {
+		name   string
+		modify func(people []*org.Person) []*org.Person
+	}{
+		{"no operator key", func(p []*org.Person) []*org.Person { p[1].Key = ""; return p }},
+		{"two operator keys", func(p []*org.Person) []*org.Person { p[0].Key = eracun.PersonKeyOperator; return p }},
+		{"operator without OIB", func(p []*org.Person) []*org.Person { p[1].Identities = nil; return p }},
+		{"operator without a name", func(p []*org.Person) []*org.Person { p[1].Name = &org.Name{}; return p }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inv := testInvoice()
+			inv.Supplier.People = tt.modify(inv.Supplier.People)
+			env, err := gobl.Envelop(inv)
+			require.NoError(t, err)
+			require.NoError(t, env.Calculate())
+			_, err = goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, gobl.ErrValidation)
+			assert.ErrorContains(t, err, "operator")
+		})
+	}
 }
 
 // TestSellerContactPoint checks that a person with the operator key is not

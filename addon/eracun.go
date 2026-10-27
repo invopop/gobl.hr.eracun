@@ -27,6 +27,9 @@ const (
 	V1 cbc.Key = Key + "-v1"
 )
 
+// contentTypePDF is the content type of the specifications listed as sources.
+const contentTypePDF = "application/pdf"
+
 func init() {
 	tax.RegisterAddonDef(newAddon())
 	rules.RegisterWithGuard(
@@ -63,12 +66,14 @@ func newAddon() *tax.AddonDef {
 				code, the operator who issued the invoice, an HR tax category on every
 				tax, a KPD classification on each line and extra HR tax totals.
 
-				The operator is the supplier person with the "operator" key, or else
-				the first supplier person with an OIB identity, and must have an OIB
-				identity. A person with the "operator" key is not the seller's
-				contact. Parties
-				with a Croatian tax ID and no ISO 6523 endpoint are given the
-				eRačun network address 9934:<OIB>.
+				The operator is the supplier person with the "operator" key: exactly
+				one person must have it, with a name and an OIB identity, and no other
+				person is taken in their place. Where Art. 8(4) of the Fiscalisation
+				Act allows it, the operator's OIB may be the supplier's own. The
+				operator is not the seller's contact. Correcting an invoice with GOBL
+				leaves out the original operator, so the corrective document needs its
+				own. Parties with a Croatian tax ID and no ISO 6523 endpoint are given
+				the eRačun network address 9934:<OIB>.
 			`),
 		},
 		Sources: []*cbc.Source{
@@ -79,8 +84,32 @@ func newAddon() *tax.AddonDef {
 				},
 				URL: "https://porezna.gov.hr/fiskalizacija/bezgotovinski-racuni/eracun",
 			},
+			{
+				Title: i18n.String{
+					i18n.EN: "Specification for the core use of eRačun with extensions v1.8",
+					i18n.HR: "Specifikacija osnovne uporabe eRačuna s proširenjima v1.8",
+				},
+				URL:         "https://porezna.gov.hr/fiskalizacija/api/dokumenti/196",
+				ContentType: contentTypePDF,
+			},
+			{
+				Title: i18n.String{
+					i18n.EN: "Technical specification: eRačun fiscalization and eReporting v1.15",
+					i18n.HR: "Tehnička specifikacija: Fiskalizacija eRačuna i eIzvještavanje v1.15",
+				},
+				URL:         "https://porezna.gov.hr/fiskalizacija/api/dokumenti/186",
+				ContentType: contentTypePDF,
+			},
+			{
+				Title: i18n.String{
+					i18n.EN: "Application response v1.1",
+					i18n.HR: "Aplikacijski odgovor v1.1",
+				},
+				URL:         "https://porezna.gov.hr/fiskalizacija/api/dokumenti/206",
+				ContentType: contentTypePDF,
+			},
 		},
-		Extensions: extensions,
-		Tags:       []*tax.TagSet{invoiceTags},
+		Extensions:  extensions,
+		Corrections: invoiceCorrectionDefinitions,
 	}
 }

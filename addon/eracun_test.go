@@ -40,6 +40,7 @@ func testInvoice() *bill.Invoice {
 			},
 			People: []*org.Person{
 				{
+					Key:        eracun.PersonKeyOperator,
 					Name:       &org.Name{Given: "Operater1"},
 					Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
 				},
@@ -98,13 +99,43 @@ func TestInvoiceRules(t *testing.T) {
 		{"process P13", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(eracun.ExtKeyProcess, "P13") }, "GOBL-HR-ERACUN-BILL-INVOICE-04"},
 		{"process P99 without label", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(eracun.ExtKeyProcess, "P99") }, "GOBL-HR-ERACUN-BILL-INVOICE-04"},
 		{"supplier without endpoint", func(inv *bill.Invoice) { inv.Supplier.TaxID = &tax.Identity{Country: "HR"} }, "GOBL-HR-ERACUN-BILL-INVOICE-05"},
-		{"no operator", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
-		{"operator without a name", func(inv *bill.Invoice) { inv.Supplier.People[0].Name = &org.Name{} }, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
-		{"operator key without OIB", func(inv *bill.Invoice) {
-			inv.Supplier.People = append(inv.Supplier.People, &org.Person{Key: eracun.PersonKeyOperator, Name: &org.Name{Given: "Operater2"}})
+		{"no operator key", func(inv *bill.Invoice) { inv.Supplier.People[0].Key = "" }, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
+		{"no people", func(inv *bill.Invoice) { inv.Supplier.People = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
+		{"two people with the operator key", func(inv *bill.Invoice) {
+			inv.Supplier.People = append(inv.Supplier.People, &org.Person{
+				Key:        eracun.PersonKeyOperator,
+				Name:       &org.Name{Given: "Operater2"},
+				Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
+			})
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
+		{"operator without a name", func(inv *bill.Invoice) { inv.Supplier.People[0].Name = &org.Name{} }, "GOBL-HR-ERACUN-BILL-INVOICE-12"},
+		{"operator without OIB", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-13"},
+		{"operator without OIB while another person has one", func(inv *bill.Invoice) {
+			inv.Supplier.People[0].Identities = nil
+			inv.Supplier.People = append(inv.Supplier.People, &org.Person{
+				Name:       &org.Name{Given: "Ana"},
+				Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
+			})
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-13"},
 		{"no customer", func(inv *bill.Invoice) { inv.Customer = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-07"},
+		{"supplier with only an email endpoint", func(inv *bill.Invoice) {
+			inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
+			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-05"},
 		{"customer without endpoint", func(inv *bill.Invoice) { inv.Customer.TaxID = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		{"customer with only an email endpoint", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		{"customer inbox with only an email", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Inboxes = []*org.Inbox{{Email: "racuni@example.com"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		{"customer email endpoint written before an inbox scheme", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "0088", Code: "3850001234567"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
 		{"customer endpoint not written to UBL", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "https://example.com/inbox"}}
@@ -137,6 +168,11 @@ func TestInvoiceRules(t *testing.T) {
 		}, "GOBL-HR-ERACUN-TAX-COMBO-01"},
 		{"standard rate of another country", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Country = "DE"
+		}, "GOBL-HR-ERACUN-TAX-COMBO-01"},
+		{"HR tax category that doesn't match the rate", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes[0].Rate = ""
+			inv.Lines[0].Taxes[0].Percent = num.NewPercentage(100, 3)
+			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPDV25})
 		}, "GOBL-HR-ERACUN-TAX-COMBO-01"},
 		{"pass-through category on a standard combo", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPP})
@@ -189,6 +225,15 @@ func TestTaxComboNormalization(t *testing.T) {
 	}
 }
 
+func TestEndpointFromInboxScheme(t *testing.T) {
+	inv := testInvoice()
+	inv.Customer.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
+	inv.Customer.Inboxes = []*org.Inbox{{Scheme: "0088", Code: "3850001234567"}}
+	require.NoError(t, inv.Calculate())
+	require.Empty(t, inv.Customer.Endpoints)
+	require.NoError(t, rules.Validate(inv))
+}
+
 func TestEndpointNotDerivedWhenPresent(t *testing.T) {
 	inv := testInvoice()
 	inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::0088:1234567890123"}}
@@ -198,18 +243,36 @@ func TestEndpointNotDerivedWhenPresent(t *testing.T) {
 }
 
 func TestOperator(t *testing.T) {
-	contact := &org.Person{Name: &org.Name{Given: "Contact"}}
-	operator := &org.Person{
-		Name:       &org.Name{Given: "Operater1"},
-		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
+	contact := &org.Person{
+		Name:       &org.Name{Given: "Ana"},
+		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
 	}
-	unnamed := &org.Person{
-		Name:       &org.Name{},
-		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
-	}
-	assert.Same(t, operator, eracun.Operator([]*org.Person{nil, contact, unnamed, operator}))
+	operator := &org.Person{Key: eracun.PersonKeyOperator, Name: &org.Name{Given: "Operater1"}}
+	assert.Same(t, operator, eracun.Operator([]*org.Person{nil, contact, operator}))
 	assert.Nil(t, eracun.Operator([]*org.Person{contact}))
-	assert.Nil(t, eracun.Operator([]*org.Person{unnamed}))
+	assert.Nil(t, eracun.Operator(nil))
+	other := &org.Person{Key: eracun.PersonKeyOperator, Name: &org.Name{Given: "Operater2"}}
+	assert.Nil(t, eracun.Operator([]*org.Person{operator, other}))
+}
+
+// TestOperatorCompanyOIB checks that the operator may carry the supplier's
+// own OIB, which Art. 8(4) of the Fiscalisation Act allows in some cases.
+func TestOperatorCompanyOIB(t *testing.T) {
+	inv := testInvoice()
+	inv.Supplier.People[0].Name = &org.Name{Given: "Web shop"}
+	inv.Supplier.People[0].Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: inv.Supplier.TaxID.Code}}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+}
+
+// TestOperatorVATNumberAsOIB checks that the supplier's VAT number given as
+// the operator's OIB is read as the bare OIB, as the hr regime cleans it.
+func TestOperatorVATNumberAsOIB(t *testing.T) {
+	inv := testInvoice()
+	inv.Supplier.People[0].Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "HR 1234-5678-903"}}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+	assert.Equal(t, cbc.Code("12345678903"), inv.Supplier.People[0].Identities[0].Code)
 }
 
 func TestOperatorName(t *testing.T) {
@@ -218,6 +281,56 @@ func TestOperatorName(t *testing.T) {
 	assert.Equal(t, "Ivan", eracun.OperatorName(&org.Name{Given: "Ivan"}))
 	assert.Equal(t, "Kovač", eracun.OperatorName(&org.Name{Surname: "Kovač"}))
 	assert.Empty(t, eracun.OperatorName(nil))
+}
+
+// testCorrectedInvoice provides a valid invoice with a contact on either side
+// of the operator, corrected as a credit note.
+func testCorrectedInvoice(t *testing.T) *bill.Invoice {
+	t.Helper()
+	inv := testInvoice()
+	inv.Supplier.People = []*org.Person{
+		{Name: &org.Name{Given: "Ana"}},
+		inv.Supplier.People[0],
+		{Name: &org.Name{Given: "Marko"}},
+	}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+	require.NoError(t, inv.Correct(bill.Credit, bill.WithIssueDate(cal.MakeDate(2026, 3, 15))))
+	return inv
+}
+
+// TestCorrectionLeavesOutOperator checks that a correction drops the original
+// operator and keeps the other supplier people in order, so the corrective
+// document needs its own operator.
+func TestCorrectionLeavesOutOperator(t *testing.T) {
+	inv := testCorrectedInvoice(t)
+	require.Len(t, inv.Supplier.People, 2)
+	assert.Equal(t, "Ana", inv.Supplier.People[0].Name.Given)
+	assert.Equal(t, "Marko", inv.Supplier.People[1].Name.Given)
+	assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-06")
+}
+
+func TestCorrectionWithNewOperator(t *testing.T) {
+	inv := testCorrectedInvoice(t)
+	inv.Supplier.People = append(inv.Supplier.People, &org.Person{
+		Key:        eracun.PersonKeyOperator,
+		Name:       &org.Name{Given: "Operater2"},
+		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
+	})
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+}
+
+// TestCorrectionDefinition checks that the addon's correction definition
+// holds only its normalizer, so the correction types, stamps and tax copy
+// stay as the regime and the other addons define them.
+func TestCorrectionDefinition(t *testing.T) {
+	def := tax.AddonForKey(eracun.V1).Corrections.Def(bill.ShortSchemaInvoice)
+	require.NotNil(t, def)
+	require.NotNil(t, def.Normalizer)
+	rest := *def
+	rest.Normalizer = nil
+	assert.Equal(t, tax.CorrectionDefinition{Schema: bill.ShortSchemaInvoice}, rest)
 }
 
 func testStatus() *bill.Status {
@@ -260,7 +373,15 @@ func TestStatusRules(t *testing.T) {
 		code   rules.Code
 	}{
 		{"supplier without endpoint", func(st *bill.Status) { st.Supplier.TaxID = &tax.Identity{Country: "HR"} }, "GOBL-HR-ERACUN-BILL-STATUS-01"},
+		{"supplier with only an email endpoint", func(st *bill.Status) {
+			st.Supplier.TaxID = &tax.Identity{Country: "HR"}
+			st.Supplier.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-01"},
 		{"customer without endpoint", func(st *bill.Status) { st.Customer.TaxID = &tax.Identity{Country: "HR"} }, "GOBL-HR-ERACUN-BILL-STATUS-03"},
+		{"customer with only an email endpoint", func(st *bill.Status) {
+			st.Customer.TaxID = &tax.Identity{Country: "HR"}
+			st.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-03"},
 		{"accepted", func(st *bill.Status) { st.Lines[0].Key = bill.StatusLineAccepted }, "GOBL-HR-ERACUN-BILL-STATUS-04"},
 		{"no description", func(st *bill.Status) { st.Lines[0].Description = "" }, "GOBL-HR-ERACUN-BILL-STATUS-05"},
 		{"no rejection reason", func(st *bill.Status) { st.Lines[0].Reasons[0].Ext = tax.Extensions{} }, "GOBL-HR-ERACUN-BILL-STATUS-06"},
@@ -289,15 +410,4 @@ func TestStatusRules(t *testing.T) {
 		require.NoError(t, st.Calculate())
 		require.NoError(t, rules.Validate(st))
 	})
-}
-
-func TestOperatorKey(t *testing.T) {
-	keyed := &org.Person{Key: eracun.PersonKeyOperator, Name: &org.Name{Given: "Operater1"}}
-	other := &org.Person{
-		Name:       &org.Name{Given: "Ana"},
-		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
-	}
-	assert.Same(t, keyed, eracun.Operator([]*org.Person{other, keyed}))
-	assert.Same(t, other, eracun.Operator([]*org.Person{other}))
-	assert.Nil(t, eracun.Operator([]*org.Person{{Name: &org.Name{Given: "Bez OIB"}}}))
 }

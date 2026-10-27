@@ -1,11 +1,9 @@
 package eracun
 
 import (
-	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/i18n"
 	"github.com/invopop/gobl/pkg/here"
-	"github.com/invopop/gobl/tax"
 )
 
 // Extension keys
@@ -48,28 +46,12 @@ const (
 	RejectionReasonO cbc.Code = "O"
 )
 
-// PassThroughTaxCategories are amounts the supplier collects for a third
-// party. They are exempt (E) in the EN 16931 core and outside the VAT base
-// (O) in the HR extension.
+// PassThroughTaxCategories are amounts left out of the VAT base: POVNAK, PP
+// and PPMV, which the supplier collects for a third party, and N, any other
+// non-taxable fee charged with taxable items. They are exempt (E) in the
+// EN 16931 core and outside the VAT base (O) in the HR extension.
 var PassThroughTaxCategories = []cbc.Code{
 	TaxCategoryPOVNAK, TaxCategoryPP, TaxCategoryPPMV, TaxCategoryN,
-}
-
-// TagCashBasis marks an invoice whose VAT is accounted for when it is paid
-// (obračun PDV-a po naplaćenim naknadama).
-const TagCashBasis cbc.Key = "cash-basis"
-
-var invoiceTags = &tax.TagSet{
-	Schema: bill.ShortSchemaInvoice,
-	List: []*cbc.Definition{
-		{
-			Key: TagCashBasis,
-			Name: i18n.String{
-				i18n.EN: "Cash basis VAT",
-				i18n.HR: "Obračun PDV-a po naplaćenoj naknadi",
-			},
-		},
-	},
 }
 
 var extensions = []*cbc.Definition{
@@ -99,7 +81,8 @@ var extensions = []*cbc.Definition{
 			i18n.EN: here.Doc(`
 				HR tax category of the tax combo (HR-TB-2). Set automatically from
 				the tax key and rate, except for amounts collected for a third party
-				(POVNAK, PP, PPMV and N), which must be set on an exempt combo.
+				(POVNAK, PP and PPMV) and any other non-taxable fee charged with
+				taxable items (N), which must be set on an exempt combo.
 			`),
 		},
 		Values: []*cbc.Definition{

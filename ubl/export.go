@@ -20,13 +20,13 @@ import (
 // taxCategoryPrefix starts every HR tax category name (HR-TB-2).
 const taxCategoryPrefix = "HR:"
 
-// passThroughTaxSchemes are the tax schemes of the amounts collected for a
-// third party, as the HR extension breaks them down.
+// passThroughTaxSchemes are the tax schemes of the amounts left out of the
+// VAT base that belong to another tax, as the HR extension breaks them down.
+// The others, such as a non-taxable fee (N), keep VAT.
 var passThroughTaxSchemes = map[cbc.Code]string{
 	eracun.TaxCategoryPP:     "LOC",
 	eracun.TaxCategoryPOVNAK: "OTH",
 	eracun.TaxCategoryPPMV:   "CAR",
-	eracun.TaxCategoryN:      goblubl.TaxSchemeVAT,
 }
 
 // exportHR applies the HR CIUS rules to an exported invoice.
@@ -43,7 +43,9 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 	if p := inv.Tax.GetExt(eracun.ExtKeyProcess); p != cbc.CodeEmpty {
 		out.ProfileID = &goblubl.IDType{Value: p.String()}
 	}
-	exportSellerContact(inv, out)
+	if err := exportSellerContact(inv, out); err != nil {
+		return err
+	}
 	exportSellerContactPoint(inv, out)
 	exportSellerTaxRegistration(out)
 	exportPaymentMeansText(inv, out)
@@ -58,7 +60,7 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 
 // mergeTaxSubtotals joins the VAT breakdown entries of the same category and
 // rate. GOBL keeps a separate rate total for each HR tax category, so an
-// exempt supply and an amount collected for a third party would otherwise be
+// exempt supply and an amount left out of the VAT base would otherwise be
 // two exempt entries, where EN 16931 allows one (BR-E-01). The first
 // exemption reason and code found are kept.
 func mergeTaxSubtotals(out *goblubl.Invoice) error {
@@ -119,25 +121,29 @@ func addAmounts(a, b goblubl.Amount) (goblubl.Amount, error) {
 	return goblubl.Amount{CurrencyID: a.CurrencyID, Value: x.Add(y).String()}, nil
 }
 
-// exportSellerContact writes the operator (HR-BT-4, HR-BT-5).
-func exportSellerContact(inv *bill.Invoice, out *goblubl.Invoice) {
-	if inv.Supplier == nil {
-		return
+// exportSellerContact writes the operator (HR-BT-4, HR-BT-5). An invoice
+// without one, which the rules reject, is refused rather than written without
+// the SellerContact (HR-BR-9, HR-BR-37), in case it was not validated first.
+func exportSellerContact(inv *bill.Invoice, out *goblubl.Invoice) error {
+	var op *org.Person
+	if inv.Supplier != nil {
+		op = eracun.Operator(inv.Supplier.People)
 	}
-	op := eracun.Operator(inv.Supplier.People)
-	if op == nil {
-		return
+	var id *org.Identity
+	name := ""
+	if op != nil {
+		id = org.IdentityForType(op.Identities, hr.IdentityTypeOIB)
+		name = eracun.OperatorName(op.Name)
 	}
-	id := org.IdentityForType(op.Identities, hr.IdentityTypeOIB)
-	if id == nil {
-		return
+	if id == nil || id.Code == cbc.CodeEmpty || name == "" {
+		return gobl.ErrValidation.WithReason("invoice supplier requires exactly one person with the operator key, a name and an OIB identity (HR-BR-9, HR-BR-37)")
 	}
 	oib := id.Code.String()
-	name := eracun.OperatorName(op.Name)
 	out.AccountingSupplierParty.SellerContact = &goblubl.Contact{
 		ID:   &oib,
 		Name: &name,
 	}
+	return nil
 }
 
 // exportSellerContactPoint keeps a person with the operator key out of the
@@ -290,10 +296,10 @@ func taxCategoryName(ext tax.Extensions) *string {
 
 // exportHRFISK20Data adds the HR extension data: the cash basis VAT flag,
 // and the HR VAT breakdown and totals when the invoice has exempt amounts
-// (HR-BR-26), which is how amounts collected for a third party are carried.
+// (HR-BR-26), which is how amounts left out of the VAT base are carried.
 func exportHRFISK20Data(inv *bill.Invoice, out *goblubl.Invoice) error {
 	data := new(HRFISK20Data)
-	if inv.HasTags(eracun.TagCashBasis) {
+	if inv.HasTags(hr.TagCashBasis) {
 		data.HRObracunPDVPoNaplati = cashBasisText
 	}
 	if vat := vatTotal(inv); vat != nil && hasExemptRate(vat) {
@@ -321,9 +327,9 @@ func hasExemptRate(vat *tax.CategoryTotal) bool {
 	return false
 }
 
-// hrTotals breaks the VAT totals down by HR tax category. Amounts collected
-// for a third party move to category O, outside the VAT base (HR-BR-29,
-// HR-BR-32), and so does any other O amount.
+// hrTotals breaks the VAT totals down by HR tax category. Amounts left out
+// of the VAT base move to category O (HR-BR-29, HR-BR-32), and so does any
+// other O amount.
 func hrTotals(inv *bill.Invoice, vat *tax.CategoryTotal) (*HRTaxTotal, *HRLegalMonetaryTotal) {
 	ccy := inv.Currency
 	amount := func(a num.Amount) goblubl.Amount {
@@ -341,9 +347,11 @@ func hrTotals(inv *bill.Invoice, vat *tax.CategoryTotal) (*HRTaxTotal, *HRLegalM
 			Percent:     "0",
 			HRTaxScheme: HRTaxScheme{ID: goblubl.TaxSchemeVAT},
 		}
-		if scheme, ok := passThroughTaxSchemes[label]; ok {
+		if label.In(eracun.PassThroughTaxCategories...) {
 			cat.ID = en16931.TaxCategoryOutsideScope.String()
-			cat.HRTaxScheme.ID = scheme
+			if scheme, ok := passThroughTaxSchemes[label]; ok {
+				cat.HRTaxScheme.ID = scheme
+			}
 		} else {
 			if r.Percent != nil {
 				cat.Percent = r.Percent.StringWithoutSymbol()

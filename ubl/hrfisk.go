@@ -16,8 +16,8 @@ const NamespaceHRExtension = "urn:mfin.gov.hr:schema:xsd:HRExtensionAggregateCom
 const cashBasisText = "Obračun po naplaćenoj naknadi"
 
 // HRFISK20Data holds the HR extension data of an invoice (HR-BG-1): the VAT
-// breakdown that puts amounts collected for a third party outside the VAT
-// base, the totals that follow from it, and the cash basis VAT flag.
+// breakdown that puts POVNAK, PP, PPMV and N amounts outside the VAT base,
+// the totals that follow from it, and the cash basis VAT flag.
 type HRFISK20Data struct {
 	XMLName               xml.Name              `xml:"hrextac:HRFISK20Data"`
 	Namespace             string                `xml:"xmlns:hrextac,attr"`

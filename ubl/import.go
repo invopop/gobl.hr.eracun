@@ -35,7 +35,7 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 		return err
 	}
 	if data != nil && data.HRObracunPDVPoNaplati != "" {
-		inv.SetTags(append(inv.GetTags(), eracun.TagCashBasis)...)
+		inv.SetTags(append(inv.GetTags(), hr.TagCashBasis)...)
 	}
 	return nil
 }
@@ -57,9 +57,10 @@ func importDocumentType(in *goblubl.Invoice, inv *bill.Invoice) {
 }
 
 // importOperator adds the operator from the SellerContact to the supplier's
-// people: the OIB goes to the person gobl.ubl read from the party contact
-// (BG-6) when the names match, or to a new person. A SellerContact without
-// an ID or a name adds nobody, so that the missing operator is the fault.
+// people, as a person with the operator key. The person gobl.ubl read from
+// the party contact (BG-6) stays apart, even with the same name, so that the
+// export writes both back. A SellerContact without an ID or a name adds
+// nobody, so that the missing operator is the fault.
 func importOperator(in *goblubl.Invoice, inv *bill.Invoice) {
 	sc := in.AccountingSupplierParty.SellerContact
 	if sc == nil || sc.ID == nil || sc.Name == nil || inv.Supplier == nil {
@@ -70,17 +71,10 @@ func importOperator(in *goblubl.Invoice, inv *bill.Invoice) {
 	if oib == "" || name == "" {
 		return
 	}
-	id := &org.Identity{Type: hr.IdentityTypeOIB, Code: cbc.Code(oib)}
-	for _, p := range inv.Supplier.People {
-		if p != nil && eracun.OperatorName(p.Name) == name {
-			p.Identities = org.AddIdentity(p.Identities, id)
-			return
-		}
-	}
 	inv.Supplier.People = append(inv.Supplier.People, &org.Person{
 		Key:        eracun.PersonKeyOperator,
 		Name:       &org.Name{Given: name},
-		Identities: []*org.Identity{id},
+		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: cbc.Code(oib)}},
 	})
 }
 
@@ -102,7 +96,7 @@ func importPaymentMeansText(in *goblubl.Invoice, inv *bill.Invoice) {
 }
 
 // importPassThroughTaxCategories sets the HR tax category of the lines and
-// document level charges that carry an amount collected for a third party.
+// document level charges that carry an amount left out of the VAT base.
 // The other categories follow from the tax key and rate.
 func importPassThroughTaxCategories(in *goblubl.Invoice, inv *bill.Invoice) {
 	for i, l := range ublLines(in) {

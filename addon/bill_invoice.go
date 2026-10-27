@@ -1,6 +1,7 @@
 package eracun
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/invopop/gobl/addons/eu/en16931"
@@ -41,6 +42,30 @@ var kpdExemptDocumentTypes = []cbc.Code{
 var buyerVATTaxCategories = []cbc.Code{
 	en16931.TaxCategoryStandard, en16931.TaxCategoryZero,
 	en16931.TaxCategoryExempt, en16931.TaxCategoryReverseCharge,
+}
+
+var invoiceCorrectionDefinitions = tax.CorrectionSet{
+	{
+		Schema:     bill.ShortSchemaInvoice,
+		Normalizer: new(billCorrectionNormalizer),
+	},
+}
+
+// billCorrectionNormalizer leaves the original operator out of a corrective
+// document, which names the person who issued it (Art. 8(1) of the
+// Fiscalisation Act), so the rules ask for a new one. The whole person goes,
+// so they aren't written as the seller's contact (BG-6) instead.
+type billCorrectionNormalizer struct{}
+
+func (*billCorrectionNormalizer) Normalize(doc any) {
+	in, ok := doc.(*bill.CorrectionNormalize)
+	if !ok || in.Invoice.Supplier == nil {
+		return
+	}
+	sup := in.Invoice.Supplier
+	sup.People = slices.DeleteFunc(sup.People, func(p *org.Person) bool {
+		return isOperator(p)
+	})
 }
 
 func normalizeInvoice(inv *bill.Invoice) {
@@ -90,18 +115,32 @@ func billInvoiceRules() *rules.Set {
 			),
 		),
 		rules.Field("supplier",
-			rules.Assert("05", "invoice supplier requires an endpoint (HR-BR-7)",
+			rules.Assert("05", "invoice supplier requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (HR-BR-7)",
 				is.Func("has endpoint", partyHasEndpoint),
 			),
 			rules.Field("people",
-				rules.Assert("06", "invoice supplier requires a person with a name and an OIB identity, the operator (HR-BR-9, HR-BR-37)",
-					is.Func("has operator", peopleHaveOperator),
+				rules.Assert("06", "invoice supplier requires exactly one person with the operator key, the person who issued the invoice (HR-BR-9, HR-BR-37)",
+					is.Func("has one operator", peopleHaveOneOperator),
+				),
+				rules.Each(
+					rules.When(is.Func("operator", isOperator),
+						rules.Field("name",
+							rules.Assert("12", "invoice supplier operator requires a name, written as the operator label (HR-BT-4)",
+								is.Func("has label", nameHasLabel),
+							),
+						),
+						rules.Field("identities",
+							rules.Assert("13", "invoice supplier operator requires an identity of type OIB: their own OIB, or the supplier's where Art. 8(4) of the Fiscalisation Act allows it (HR-BT-5)",
+								is.Func("has OIB", identitiesHaveOIB),
+							),
+						),
+					),
 				),
 			),
 		),
 		rules.Field("customer",
 			rules.Assert("07", "invoice customer is required", is.Present),
-			rules.Assert("08", "invoice customer requires an endpoint (HR-BR-10)",
+			rules.Assert("08", "invoice customer requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (HR-BR-10)",
 				is.Func("has endpoint", partyHasEndpoint),
 			),
 		),
@@ -129,49 +168,79 @@ func billInvoiceRules() *rules.Set {
 	)
 }
 
-// partyHasEndpoint checks the party has an address that is written as its
-// UBL EndpointID: an ISO 6523 or email endpoint, or an inbox with an email or
-// a scheme.
+// partyHasEndpoint checks the party has an eRačun address, the ISO 6523
+// identifier registered in AMS, as the UBL EndpointID it is written to. The
+// export writes the first of an ISO 6523 endpoint, an email endpoint, or an
+// inbox with an email or a scheme, and an email is not an eRačun address.
 func partyHasEndpoint(val any) bool {
 	p, ok := val.(*org.Party)
-	if !ok || p == nil || p.Endpoint(iso.ActorIDScheme) != nil || p.Endpoint("mailto") != nil {
+	if !ok || p == nil || p.Endpoint(iso.ActorIDScheme) != nil {
 		return true
 	}
+	if p.Endpoint("mailto") != nil {
+		return false
+	}
 	for _, ib := range p.Inboxes {
-		if ib != nil && (ib.Email != "" || ib.Scheme != cbc.CodeEmpty) {
+		if ib == nil {
+			continue
+		}
+		if ib.Email != "" {
+			return false
+		}
+		if ib.Scheme != cbc.CodeEmpty {
 			return true
 		}
 	}
 	return false
 }
 
-func peopleHaveOperator(val any) bool {
+func peopleHaveOneOperator(val any) bool {
 	people, _ := val.([]*org.Person)
-	op := Operator(people)
-	return op != nil && org.IdentityForType(op.Identities, hr.IdentityTypeOIB) != nil
-}
-
-// PersonKeyOperator marks the supplier person who issued the invoice and is
-// not also the seller's contact (BG-6).
-const PersonKeyOperator cbc.Key = "operator"
-
-// Operator provides the person who issued the invoice: the one with a name
-// and the operator key, or else the first one with a name and an OIB
-// identity. Only the second kind is sure to have an OIB.
-func Operator(people []*org.Person) *org.Person {
-	var first *org.Person
+	n := 0
 	for _, p := range people {
-		if p == nil || OperatorName(p.Name) == "" {
-			continue
-		}
-		if p.Key == PersonKeyOperator {
-			return p
-		}
-		if first == nil && org.IdentityForType(p.Identities, hr.IdentityTypeOIB) != nil {
-			first = p
+		if isOperator(p) {
+			n++
 		}
 	}
-	return first
+	return n == 1
+}
+
+func isOperator(val any) bool {
+	p, ok := val.(*org.Person)
+	return ok && p != nil && p.Key == PersonKeyOperator
+}
+
+func nameHasLabel(val any) bool {
+	n, _ := val.(*org.Name)
+	return OperatorName(n) != ""
+}
+
+func identitiesHaveOIB(val any) bool {
+	ids, _ := val.([]*org.Identity)
+	return org.IdentityForType(ids, hr.IdentityTypeOIB) != nil
+}
+
+// PersonKeyOperator marks the supplier person who issued the invoice, the
+// operator, who is not also the seller's contact (BG-6). Exactly one
+// supplier person has it.
+const PersonKeyOperator cbc.Key = "operator"
+
+// Operator provides the person who issued the invoice: the supplier person
+// with the operator key, when exactly one has it. No other person is taken
+// in their place; the rules require exactly one, with a name and an OIB
+// identity.
+func Operator(people []*org.Person) *org.Person {
+	var op *org.Person
+	for _, p := range people {
+		if !isOperator(p) {
+			continue
+		}
+		if op != nil {
+			return nil
+		}
+		op = p
+	}
+	return op
 }
 
 // OperatorName provides the operator label (HR-BT-4) of a person: the alias,
