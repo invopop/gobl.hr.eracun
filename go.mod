@@ -37,11 +37,10 @@ require (
 	software.sslmate.com/src/go-pkcs12 v0.7.0 // indirect
 )
 
-// LOCAL DEVELOPMENT ONLY: remove before tagging or merging. These point at
-// local checkouts of the unreleased hr regime (gobl) and the generic HR fields
-// (gobl.ubl), so the module does not build anywhere else, CI included. Pin
-// both to released versions (or main pseudo-versions) once they are merged;
-// the README lists what each pin waits for.
+// UNRELEASED DEPENDENCIES: remove before tagging or merging. These pin the
+// unreleased hr regime (gobl) and the generic HR fields (gobl.ubl) to branch
+// commits. Pin both to released versions (or main pseudo-versions) once they
+// are merged; the README lists what each pin waits for.
 replace (
 	github.com/invopop/gobl => github.com/invopop/gobl v0.510.1-0.20261027164024-70ccde1c0e68
 	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.99.1-0.20261029151946-6a6d1e1774f2
