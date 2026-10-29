@@ -154,8 +154,10 @@ func trimResponseParty(p *goblubl.Party) {
 }
 
 // importApplicationResponse reads the HR codes of an imported application
-// response. Codes, lists and status text outside the HR model are refused;
-// every status is read, so the addon rules refuse more than one.
+// response. Response codes, status lists, status codes and status text
+// outside the HR model are refused; every status is read, so the addon rules
+// refuse more than one. The list of the response code is not checked, as the
+// HR model defines none for AR-BT-10.
 func importApplicationResponse(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error {
 	in, ok := doc.(*goblubl.ApplicationResponse)
 	st, ok2 := env.Extract().(*bill.Status)
