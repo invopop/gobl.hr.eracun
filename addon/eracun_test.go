@@ -108,60 +108,61 @@ func TestInvoiceRules(t *testing.T) {
 				Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
 			})
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-06"},
-		{"operator without a name", func(inv *bill.Invoice) { inv.Supplier.People[0].Name = &org.Name{} }, "GOBL-HR-ERACUN-BILL-INVOICE-12"},
-		{"operator without OIB", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-13"},
+		// GOBL's person name rules already require the name HR-BR-37 needs.
+		{"operator without a name", func(inv *bill.Invoice) { inv.Supplier.People[0].Name = nil }, "GOBL-ORG-PERSON-01"},
+		{"operator without OIB", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-07"},
 		{"operator without OIB while another person has one", func(inv *bill.Invoice) {
 			inv.Supplier.People[0].Identities = nil
 			inv.Supplier.People = append(inv.Supplier.People, &org.Person{
 				Name:       &org.Name{Given: "Ana"},
 				Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
 			})
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-13"},
-		{"no customer", func(inv *bill.Invoice) { inv.Customer = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-07"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-07"},
+		{"no customer", func(inv *bill.Invoice) { inv.Customer = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
 		{"supplier with only an email endpoint", func(inv *bill.Invoice) {
 			inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
 			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-05"},
-		{"customer without endpoint", func(inv *bill.Invoice) { inv.Customer.TaxID = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		{"customer without endpoint", func(inv *bill.Invoice) { inv.Customer.TaxID = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
 		{"customer with only an email endpoint", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
 		{"customer inbox with only an email", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Inboxes = []*org.Inbox{{Email: "racuni@example.com"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
 		{"customer email endpoint written before an inbox scheme", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
 			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "0088", Code: "3850001234567"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
 		{"customer endpoint not written to UBL", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "https://example.com/inbox"}}
 			inv.Customer.Inboxes = []*org.Inbox{{Code: "123"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-08"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
 		{"customer without tax ID", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
 		{"customer tax ID without code", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = &tax.Identity{Country: "HR"}
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-11"},
 		{"customer without tax ID, standard charge", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
 			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
 		{"customer without tax ID, standard discount", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
 			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
-		{"line without KPD", func(inv *bill.Invoice) { inv.Lines[0].Item.Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-11"},
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
+		{"line without KPD", func(inv *bill.Invoice) { inv.Lines[0].Item.Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-12"},
 		{"rate without HR tax category", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Rate = ""
 			inv.Lines[0].Taxes[0].Percent = num.NewPercentage(100, 3)
@@ -186,6 +187,15 @@ func TestInvoiceRules(t *testing.T) {
 			assertFault(t, inv, tt.code)
 		})
 	}
+
+	// The EN 16931 addon adds the tax with the document type while
+	// calculating, so it's removed afterwards.
+	t.Run("no tax", func(t *testing.T) {
+		inv := testInvoice()
+		require.NoError(t, inv.Calculate())
+		inv.Tax = nil
+		assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-03")
+	})
 }
 
 func TestInvoiceKPDNotRequiredOnCreditNotes(t *testing.T) {
@@ -377,6 +387,7 @@ func TestStatusRules(t *testing.T) {
 			st.Supplier.TaxID = &tax.Identity{Country: "HR"}
 			st.Supplier.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
 		}, "GOBL-HR-ERACUN-BILL-STATUS-01"},
+		{"no customer", func(st *bill.Status) { st.Customer = nil }, "GOBL-HR-ERACUN-BILL-STATUS-02"},
 		{"customer without endpoint", func(st *bill.Status) { st.Customer.TaxID = &tax.Identity{Country: "HR"} }, "GOBL-HR-ERACUN-BILL-STATUS-03"},
 		{"customer with only an email endpoint", func(st *bill.Status) {
 			st.Customer.TaxID = &tax.Identity{Country: "HR"}
@@ -393,6 +404,7 @@ func TestStatusRules(t *testing.T) {
 			st.Lines[0].Reasons[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyRejectionReason: "X"})
 		}, "GOBL-HR-ERACUN-BILL-REASON-01"},
 		{"no invoice", func(st *bill.Status) { st.Lines[0].Doc = nil }, "GOBL-HR-ERACUN-BILL-STATUS-07"},
+		{"no invoice code", func(st *bill.Status) { st.Lines[0].Doc.Code = "" }, "GOBL-HR-ERACUN-BILL-STATUS-08"},
 		{"no invoice issue date", func(st *bill.Status) { st.Lines[0].Doc.IssueDate = nil }, "GOBL-HR-ERACUN-BILL-STATUS-09"},
 	}
 	for _, tt := range tests {

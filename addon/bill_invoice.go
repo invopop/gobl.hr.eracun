@@ -122,15 +122,13 @@ func billInvoiceRules() *rules.Set {
 				rules.Assert("06", "invoice supplier requires exactly one person with the operator key, the person who issued the invoice (HR-BR-9, HR-BR-37)",
 					is.Func("has one operator", peopleHaveOneOperator),
 				),
+				// The operator label (HR-BT-4, HR-BR-37) needs no rule here:
+				// GOBL requires a given name or surname on every person, so
+				// OperatorName always has a label to write.
 				rules.Each(
 					rules.When(is.Func("operator", isOperator),
-						rules.Field("name",
-							rules.Assert("12", "invoice supplier operator requires a name, written as the operator label (HR-BT-4)",
-								is.Func("has label", nameHasLabel),
-							),
-						),
 						rules.Field("identities",
-							rules.Assert("13", "invoice supplier operator requires an identity of type OIB: their own OIB, or the supplier's where Art. 8(4) of the Fiscalisation Act allows it (HR-BT-5)",
+							rules.Assert("07", "invoice supplier operator requires an identity of type OIB: their own OIB, or the supplier's where Art. 8(4) of the Fiscalisation Act allows it (HR-BR-9)",
 								is.Func("has OIB", identitiesHaveOIB),
 							),
 						),
@@ -139,17 +137,17 @@ func billInvoiceRules() *rules.Set {
 			),
 		),
 		rules.Field("customer",
-			rules.Assert("07", "invoice customer is required", is.Present),
-			rules.Assert("08", "invoice customer requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (HR-BR-10)",
+			rules.Assert("08", "invoice customer is required", is.Present),
+			rules.Assert("09", "invoice customer requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (HR-BR-10)",
 				is.Func("has endpoint", partyHasEndpoint),
 			),
 		),
 		rules.When(is.Func("has S, Z, E or AE taxes", invoiceNeedsBuyerVAT),
 			rules.Field("customer",
 				rules.Field("tax_id",
-					rules.Assert("09", "invoice customer tax ID is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
+					rules.Assert("10", "invoice customer tax ID is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					rules.Field("code",
-						rules.Assert("10", "invoice customer tax ID code is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
+						rules.Assert("11", "invoice customer tax ID code is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					),
 				),
 			),
@@ -158,7 +156,7 @@ func billInvoiceRules() *rules.Set {
 			rules.Field("lines",
 				rules.Each(
 					rules.Field("item",
-						rules.Assert("11", "line item requires a KPD classification: an identity with label CG (HR-BR-25)",
+						rules.Assert("12", "line item requires a KPD classification: an identity with label CG (HR-BR-25)",
 							is.Func("has KPD", itemHasKPD),
 						),
 					),
@@ -208,11 +206,6 @@ func peopleHaveOneOperator(val any) bool {
 func isOperator(val any) bool {
 	p, ok := val.(*org.Person)
 	return ok && p != nil && p.Key == PersonKeyOperator
-}
-
-func nameHasLabel(val any) bool {
-	n, _ := val.(*org.Name)
-	return OperatorName(n) != ""
 }
 
 func identitiesHaveOIB(val any) bool {
