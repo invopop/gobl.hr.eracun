@@ -50,7 +50,9 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 	exportSellerTaxRegistration(out)
 	exportPaymentMeansText(inv, out)
 	removeOrderReferenceFiller(inv, out)
-	exportLineTaxCategories(inv, out)
+	if err := exportLineTaxCategories(inv, out); err != nil {
+		return err
+	}
 	exportChargeTaxCategories(inv, out)
 	if err := mergeTaxSubtotals(out); err != nil {
 		return err
@@ -228,10 +230,13 @@ func removeOrderReferenceFiller(inv *bill.Invoice, out *goblubl.Invoice) {
 // exportLineTaxCategories names the tax category of each line, with the
 // exemption reason the HR CIUS requires for E and O lines (HR-BR-16,
 // HR-BR-36).
-func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
-	lines := ublLines(out)
+func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) error {
+	lines, err := pairedLines(inv, out)
+	if err != nil {
+		return err
+	}
 	for i, l := range inv.Lines {
-		if i >= len(lines) || l == nil || lines[i].Item == nil || lines[i].Item.ClassifiedTaxCategory == nil {
+		if l == nil || lines[i].Item == nil || lines[i].Item.ClassifiedTaxCategory == nil {
 			continue
 		}
 		tc := l.Taxes.Get(tax.CategoryVAT)
@@ -252,6 +257,7 @@ func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 			ctc.TaxExemptionReason = &reason
 		}
 	}
+	return nil
 }
 
 // keptExemptionReason provides the exemption reason kept on import for a

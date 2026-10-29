@@ -26,9 +26,13 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 	}
 	importOperator(in, inv)
 	importPaymentMeansText(in, inv)
-	importPassThroughTaxCategories(in, inv)
+	lines, err := pairedLines(inv, in)
+	if err != nil {
+		return err
+	}
+	importPassThroughTaxCategories(in, inv, lines)
 	importChargeExemptionReasons(in, inv)
-	importLineExemptionReasons(in, inv)
+	importLineExemptionReasons(inv, lines)
 
 	data, err := findHRFISK20Data(in)
 	if err != nil {
@@ -98,9 +102,9 @@ func importPaymentMeansText(in *goblubl.Invoice, inv *bill.Invoice) {
 // importPassThroughTaxCategories sets the HR tax category of the lines and
 // document level charges that carry an amount left out of the VAT base.
 // The other categories follow from the tax key and rate.
-func importPassThroughTaxCategories(in *goblubl.Invoice, inv *bill.Invoice) {
-	for i, l := range ublLines(in) {
-		if i >= len(inv.Lines) || inv.Lines[i] == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
+func importPassThroughTaxCategories(in *goblubl.Invoice, inv *bill.Invoice, lines []goblubl.InvoiceLine) {
+	for i, l := range lines {
+		if inv.Lines[i] == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
 			continue
 		}
 		setPassThroughTaxCategory(inv.Lines[i].Taxes, l.Item.ClassifiedTaxCategory.Name)
@@ -147,9 +151,9 @@ func importChargeExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
 // importLineExemptionReasons keeps the exemption reasons of the lines that
 // the VAT notes don't give back. The export only writes the note's text for
 // categories E and O (HR-BR-16, HR-BR-36).
-func importLineExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
-	for i, l := range ublLines(in) {
-		if i >= len(inv.Lines) || inv.Lines[i] == nil || inv.Lines[i].Item == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
+func importLineExemptionReasons(inv *bill.Invoice, lines []goblubl.InvoiceLine) {
+	for i, l := range lines {
+		if inv.Lines[i] == nil || inv.Lines[i].Item == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
 			continue
 		}
 		ctc := l.Item.ClassifiedTaxCategory

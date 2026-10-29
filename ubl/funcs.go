@@ -30,18 +30,30 @@ func invoices(env *gobl.Envelope, doc goblubl.Document) (*bill.Invoice, *goblubl
 	return inv, out, ok && ok2
 }
 
-// ublLines provides the lines of a UBL invoice or credit note.
-func ublLines(doc *goblubl.Invoice) []goblubl.InvoiceLine {
+// pairedLines provides the lines of a UBL invoice or credit note, each at the
+// position of the GOBL line it corresponds to: with no sub-invoice lines,
+// which the HR format never writes, gobl.ubl writes one UBL line per GOBL
+// line and reads one GOBL line per UBL line, in order. A document where the
+// counts differ, such as an imported one with a line gobl.ubl left out for
+// having no price (BT-146), is refused rather than paired by position, which
+// would put the tax data of one line on another.
+func pairedLines(inv *bill.Invoice, doc *goblubl.Invoice) ([]goblubl.InvoiceLine, error) {
+	lines := doc.InvoiceLines
 	if len(doc.CreditNoteLines) > 0 {
-		return doc.CreditNoteLines
+		lines = doc.CreditNoteLines
 	}
-	return doc.InvoiceLines
+	if len(lines) != len(inv.Lines) {
+		return nil, gobl.ErrValidation.WithReason("line count differs, %d in UBL and %d in GOBL: the lines cannot be paired", len(lines), len(inv.Lines))
+	}
+	return lines, nil
 }
 
 // documentCharges calls fn with each document level charge and allowance of
 // the UBL invoice, and the taxes and meta data of the GOBL charge or discount
-// it corresponds to, in order: gobl.ubl writes and reads the charges first,
-// then the discounts.
+// it corresponds to. Charges and allowances are counted apart, which pairs
+// them in both directions: gobl.ubl writes the charges and then the
+// discounts, and reads the charges and the allowances of a document, in its
+// order, into the charges and the discounts.
 func documentCharges(doc *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta)) {
 	var charges, discounts int
 	for i := range doc.AllowanceCharge {
@@ -61,7 +73,10 @@ func documentCharges(doc *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblub
 }
 
 // taxNote provides the VAT note with the exemption reason of the EN 16931
-// tax category, the way gobl.ubl finds it for the tax breakdown.
+// tax category, the way gobl.ubl finds it for the tax breakdown. GOBL has one
+// note per category, so every E line and charge shares one reason text, an
+// exempt supply and an amount left out of the VAT base included: a reason of
+// its own is kept under MetaKeyTaxExemptionReason.
 func taxNote(inv *bill.Invoice, ext tax.Extensions) *tax.Note {
 	cat := ext.Get(untdid.ExtKeyTaxCategory)
 	if inv.Tax == nil || cat == cbc.CodeEmpty {

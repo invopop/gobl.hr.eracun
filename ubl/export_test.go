@@ -475,3 +475,58 @@ func TestKeptExemptionReasonNeedsExemptCategory(t *testing.T) {
 	doc := exportTestInvoice(t, inv)
 	assert.Nil(t, doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
 }
+
+// TestExportRefusesUnpairedLines checks that the export refuses an invoice
+// whose UBL lines don't pair one to one with the GOBL lines, instead of
+// naming the tax categories of the wrong lines: here a format that writes
+// sub-invoice lines, which the HR format never does.
+func TestExportRefusesUnpairedLines(t *testing.T) {
+	inv := testInvoice()
+	inv.Lines[0].Breakdown = []*bill.SubLine{{
+		Quantity: num.MakeAmount(2, 0),
+		Item:     &org.Item{Name: "Proizvod", Price: num.NewAmount(5000, 2)},
+	}}
+	env, err := gobl.Envelop(inv)
+	require.NoError(t, err)
+	require.NoError(t, env.Calculate())
+	require.NoError(t, env.Validate())
+
+	f := hrubl.FormatHRCIUS
+	f.SubLines = true
+	_, err = goblubl.Export(env, goblubl.WithFormat(f))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "3 in UBL and 2 in GOBL")
+
+	_, err = goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+	assert.NoError(t, err)
+}
+
+// TestImportRefusesUnpairedLines checks that the import refuses a document
+// with a line gobl.ubl leaves out, one without a price, instead of reading
+// its exemption reason into the next line.
+func TestImportRefusesUnpairedLines(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV25.xml"))
+	require.NoError(t, err)
+	s := string(data)
+	i := strings.Index(s, "\t<cac:InvoiceLine>")
+	j := strings.Index(s, "</cac:InvoiceLine>") + len("</cac:InvoiceLine>")
+	require.Positive(t, i)
+	require.Greater(t, j, i)
+	line := s[i:j]
+	p := strings.Index(line, "\t\t<cac:Price>")
+	require.Positive(t, p)
+	priceless := line[:p] + "\t</cac:InvoiceLine>"
+	priceless = strings.Replace(priceless, "<cbc:ID>1</cbc:ID>", "<cbc:ID>0</cbc:ID>", 1)
+	require.Contains(t, priceless, "<cbc:ID>0</cbc:ID>")
+	standard := "<cbc:ID>S</cbc:ID>\n\t\t\t\t<cbc:Name>HR:PDV25</cbc:Name>\n\t\t\t\t<cbc:Percent>25</cbc:Percent>"
+	require.Contains(t, priceless, standard)
+	priceless = strings.Replace(priceless, standard,
+		"<cbc:ID>E</cbc:ID>\n\t\t\t\t<cbc:Name>HR:E</cbc:Name>\n\t\t\t\t<cbc:Percent>0</cbc:Percent>\n\t\t\t\t<cbc:TaxExemptionReason>Oslobođeno</cbc:TaxExemptionReason>", 1)
+	s = s[:i] + priceless + "\n" + s[i:]
+
+	doc, err := goblubl.Decode([]byte(s))
+	require.NoError(t, err)
+	_, err = goblubl.Import(doc)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "2 in UBL and 1 in GOBL")
+}
