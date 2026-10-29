@@ -37,16 +37,10 @@
 				"issue_date": "2026-07-10",
 				"code": "123-1-1"
 			},
-			"description": "Upit o računu",
+			"description": "Nedostaje broj narudžbenice.",
 			"reasons": [
 				{
-					"key": "references",
-					"description": "Nedostaje broj narudžbenice."
-				}
-			],
-			"actions": [
-				{
-					"key": "provide"
+					"key": "references"
 				}
 			]
 		}

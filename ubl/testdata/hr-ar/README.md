@@ -14,10 +14,9 @@ placeholder OIBs of the invoice examples in `../hr`.
 specification allows by agreement between the parties: the response code is
 `AP` instead of `RE`, and the rejection's description and reason are left out.
 
-`upit.xml` is the same example sent as a query (`UQ`), with a description and
-the Peppol status clarifications a query usually carries by agreement: the
-reason `REF` (`OPStatusReason`) with a text, and the action `PIN`
-(`OPStatusAction`) asking the supplier for the missing information.
+`upit.xml` is the same example sent as a query (`UQ`): the description says
+what is missing, and the one status carries the Peppol status reason `REF`
+(`OPStatusReason`), as the parties may agree (AR-BG-5).
 
 `out/` holds each example imported into GOBL (`.json`) and exported back to UBL
 (`.xml`). Regenerate them with `go test ./ubl/ -update`.

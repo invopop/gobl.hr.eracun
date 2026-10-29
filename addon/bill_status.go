@@ -29,9 +29,16 @@ var otherResponseKeys = []cbc.Key{
 
 // billStatusRules cover the application responses a buyer sends about an
 // invoice. Every intermediary must support the rejection, the only response
-// that carries a reason.
+// with a rejection reason. A response answers one invoice and has at most one
+// status (AR-BG-5): the rejection reason, or one agreed Peppol status reason
+// or action.
 func billStatusRules() *rules.Set {
 	return rules.For(new(bill.Status),
+		rules.Field("type",
+			rules.Assert("13", "status type must be response: an HR application response goes from the buyer to the supplier (AR-BG-2, AR-BG-3)",
+				is.In(bill.StatusTypeResponse),
+			),
+		),
 		rules.Field("supplier",
 			rules.Assert("01", "status supplier requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (AR-BT-8)",
 				is.Func("has endpoint", partyHasEndpoint),
@@ -44,6 +51,9 @@ func billStatusRules() *rules.Set {
 			),
 		),
 		rules.Field("lines",
+			rules.Assert("14", "status requires exactly one line: an HR application response answers one invoice (AR-BG-4, AR-BG-6)",
+				is.Length(1, 1),
+			),
 			rules.Each(
 				rules.Field("key",
 					rules.Assert("04", "status line key must be rejected, accepted, acknowledged, processing, querying or paid (AR-BT-10)",
@@ -67,13 +77,19 @@ func billStatusRules() *rules.Set {
 						),
 					),
 				),
-				// The other responses carry the Peppol status reasons and actions
-				// agreed between the parties, never a rejection reason.
+				rules.Assert("11", "status line can have at most one reason or action, the one status of an HR application response (AR-BG-5)",
+					is.Func("has at most one status", statusLineHasAtMostOneStatus),
+				),
+				// The other responses may carry one Peppol status reason or action
+				// agreed between the parties, as a code without text.
 				rules.When(bill.StatusLineKeyIn(otherResponseKeys...),
 					rules.Field("reasons",
-						rules.Assert("10", "status line reasons of a response other than a rejection cannot have a hr-eracun-rejection-reason extension; remove it (AR-BG-5)",
+						rules.Assert("10", "status line reasons of a response other than a rejection cannot have a hr-eracun-rejection-reason extension (AR-BG-5)",
 							is.Func("has no rejection reason", reasonsHaveNoRejectionReason),
 						),
+					),
+					rules.Assert("12", "status line reason or action of a response other than a rejection has no text in an HR application response; the text goes in the line description (AR-BT-11, AR-BG-5)",
+						is.Func("has no status text", statusLineHasNoStatusText),
 					),
 				),
 				rules.Field("doc",
@@ -101,6 +117,29 @@ func statusLineHasDescription(val any) bool {
 		}
 	}
 	return false
+}
+
+func statusLineHasAtMostOneStatus(val any) bool {
+	line, ok := val.(*bill.StatusLine)
+	return !ok || line == nil || len(line.Reasons)+len(line.Actions) <= 1
+}
+
+func statusLineHasNoStatusText(val any) bool {
+	line, ok := val.(*bill.StatusLine)
+	if !ok || line == nil {
+		return true
+	}
+	for _, r := range line.Reasons {
+		if r != nil && r.Description != "" {
+			return false
+		}
+	}
+	for _, a := range line.Actions {
+		if a != nil && a.Description != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func reasonsHaveOneRejectionReason(val any) bool {

@@ -26,8 +26,8 @@ const (
 
 // statusReasonCodes and statusActionCodes map the reason and action keys of
 // a response other than a rejection to the Peppol status clarifications
-// (OPStatusReason, OPStatusAction), which the parties may agree to use
-// (AR-BG-5). They are the lists gobl.ubl maps for the Peppol invoice response,
+// (OPStatusReason, OPStatusAction), one of which the parties may agree to send
+// as the response's status (AR-BG-5). They are the lists gobl.ubl maps for the Peppol invoice response,
 // which it does not export.
 var statusReasonCodes = map[cbc.Key]string{
 	bill.ReasonKeyNone:            "NON",
@@ -116,36 +116,29 @@ func exportApplicationResponse(_ *goblubl.Format, env *gobl.Envelope, doc goblub
 		if line.Key == bill.StatusLineRejected {
 			for _, r := range eracun.RejectionReasons(line.Reasons) {
 				dr.Response.Status = append(dr.Response.Status,
-					responseStatus(rejectionReasonListID, r.Ext.Get(eracun.ExtKeyRejectionReason).String(), ""),
+					responseStatus(rejectionReasonListID, r.Ext.Get(eracun.ExtKeyRejectionReason).String()),
 				)
 			}
 			continue
 		}
-		// gobl.ubl falls back to a reason's text for the description, which
-		// only a rejection requires; the reason carries it here.
-		if line.Description == "" {
-			dr.Response.Description = nil
-		}
 		for _, r := range line.Reasons {
 			if code, ok := statusReasonCodes[r.Key]; ok {
-				dr.Response.Status = append(dr.Response.Status, responseStatus(statusReasonListID, code, r.Description))
+				dr.Response.Status = append(dr.Response.Status, responseStatus(statusReasonListID, code))
 			}
 		}
 		for _, a := range line.Actions {
 			if code, ok := statusActionCodes[a.Key]; ok {
-				dr.Response.Status = append(dr.Response.Status, responseStatus(statusActionListID, code, a.Description))
+				dr.Response.Status = append(dr.Response.Status, responseStatus(statusActionListID, code))
 			}
 		}
 	}
 	return nil
 }
 
-func responseStatus(listID, code, reason string) *goblubl.Status {
-	s := &goblubl.Status{StatusReasonCode: &goblubl.IDType{ListID: &listID, Value: code}}
-	if reason != "" {
-		s.StatusReason = []string{reason}
-	}
-	return s
+// responseStatus provides the status of a response: a code without text
+// (AR-BG-5, AR-BT-12).
+func responseStatus(listID, code string) *goblubl.Status {
+	return &goblubl.Status{StatusReasonCode: &goblubl.IDType{ListID: &listID, Value: code}}
 }
 
 // trimResponseParty keeps the party elements of the HR data model: the
@@ -161,7 +154,8 @@ func trimResponseParty(p *goblubl.Party) {
 }
 
 // importApplicationResponse reads the HR codes of an imported application
-// response.
+// response. Codes, lists and status text outside the HR model are refused;
+// every status is read, so the addon rules refuse more than one.
 func importApplicationResponse(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error {
 	in, ok := doc.(*goblubl.ApplicationResponse)
 	st, ok2 := env.Extract().(*bill.Status)
@@ -174,14 +168,28 @@ func importApplicationResponse(_ *goblubl.Format, doc goblubl.Document, env *gob
 		}
 		line := st.Lines[i]
 		if rc := dr.Response.ResponseCode; rc != nil {
-			line.Key = responseKeys[rc.Value]
+			key, ok := responseKeys[rc.Value]
+			if !ok {
+				return gobl.ErrValidation.WithReason("application response code %q is not one of AB, IP, UQ, CA, RE, AP or PD (AR-BT-10)", rc.Value)
+			}
+			line.Key = key
 		}
 		for _, s := range dr.Response.Status {
-			if s == nil || s.StatusReasonCode == nil || s.StatusReasonCode.ListID == nil {
+			if s == nil {
 				continue
 			}
+			if len(s.StatusReason) > 0 {
+				return gobl.ErrValidation.WithReason("application response status text %q is not part of the HR model: the text goes in the response description (AR-BT-11, AR-BG-5)", s.StatusReason[0])
+			}
+			if s.StatusReasonCode == nil {
+				return gobl.ErrValidation.WithReason("application response status requires a reason code (AR-BT-12)")
+			}
 			code := s.StatusReasonCode.Value
-			switch *s.StatusReasonCode.ListID {
+			listID := ""
+			if s.StatusReasonCode.ListID != nil {
+				listID = *s.StatusReasonCode.ListID
+			}
+			switch listID {
 			case rejectionReasonListID:
 				line.Reasons = append(line.Reasons, &bill.Reason{
 					Key: bill.ReasonKeyOther,
@@ -190,14 +198,20 @@ func importApplicationResponse(_ *goblubl.Format, doc goblubl.Document, env *gob
 					}),
 				})
 			case statusReasonListID:
-				// A rejection carries only its rejection reason.
-				if key := keyForCode(statusReasonCodes, code); key != "" && line.Key != bill.StatusLineRejected {
-					line.Reasons = append(line.Reasons, &bill.Reason{Key: key, Description: statusReason(s)})
+				key := keyForCode(statusReasonCodes, code)
+				if key == "" {
+					return gobl.ErrValidation.WithReason("application response status reason %q is not in the %s list", code, statusReasonListID)
 				}
+				line.Reasons = append(line.Reasons, &bill.Reason{Key: key})
 			case statusActionListID:
-				if key := keyForCode(statusActionCodes, code); key != "" && line.Key != bill.StatusLineRejected {
-					line.Actions = append(line.Actions, &bill.Action{Key: key, Description: statusReason(s)})
+				key := keyForCode(statusActionCodes, code)
+				if key == "" {
+					return gobl.ErrValidation.WithReason("application response status action %q is not in the %s list", code, statusActionListID)
 				}
+				line.Actions = append(line.Actions, &bill.Action{Key: key})
+			default:
+				return gobl.ErrValidation.WithReason("application response status code %q has the list %q, not %s, %s or %s (AR-BG-5)",
+					code, listID, rejectionReasonListID, statusReasonListID, statusActionListID)
 			}
 		}
 	}
@@ -212,11 +226,4 @@ func keyForCode(m map[cbc.Key]string, code string) cbc.Key {
 		}
 	}
 	return ""
-}
-
-func statusReason(s *goblubl.Status) string {
-	if len(s.StatusReason) == 0 {
-		return ""
-	}
-	return s.StatusReason[0]
 }

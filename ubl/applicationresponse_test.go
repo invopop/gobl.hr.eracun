@@ -134,43 +134,15 @@ func TestApplicationResponseCodes(t *testing.T) {
 		})
 	}
 
-	// Responses other than a rejection carry the Peppol status reasons and
-	// actions agreed between the parties.
-	t.Run("query with a reason and an action", func(t *testing.T) {
-		data, err := os.ReadFile(filepath.Join("testdata", "hr-ar", "upit.xml"))
-		require.NoError(t, err)
-		doc, err := goblubl.Decode(data)
-		require.NoError(t, err)
-		env, err := goblubl.Import(doc)
-		require.NoError(t, err)
-		require.NoError(t, env.Validate())
-		line := env.Extract().(*bill.Status).Lines[0]
-		assert.Equal(t, bill.StatusLineQuerying, line.Key)
-		require.Len(t, line.Reasons, 1)
-		assert.Equal(t, bill.ReasonKeyReferences, line.Reasons[0].Key)
-		assert.Equal(t, "Nedostaje broj narudžbenice.", line.Reasons[0].Description)
-		require.Len(t, line.Actions, 1)
-		assert.Equal(t, bill.ActionKeyProvide, line.Actions[0].Key)
+	// A response other than a rejection may carry one Peppol status reason or
+	// action agreed between the parties, as the one status of the response.
+	upit, err := os.ReadFile(filepath.Join("testdata", "hr-ar", "upit.xml"))
+	require.NoError(t, err)
+	reasonStatus := `<cbc:StatusReasonCode listID="OPStatusReason">REF</cbc:StatusReasonCode>`
+	require.Contains(t, string(upit), reasonStatus)
 
-		out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
-		require.NoError(t, err)
-		xmlData, err := goblubl.Encode(out)
-		require.NoError(t, err)
-		var res arDocument
-		require.NoError(t, xml.Unmarshal(xmlData, &res))
-		assert.Equal(t, []arCode{
-			{ListID: "OPStatusReason", Value: "REF"},
-			{ListID: "OPStatusAction", Value: "PIN"},
-		}, res.Responses[0].Reasons)
-		assert.Equal(t, []string{"Nedostaje broj narudžbenice."}, res.Responses[0].StatusReasons)
-	})
-
-	// The text of a reason is not repeated as the description, which only a
-	// rejection requires.
-	t.Run("query without a description", func(t *testing.T) {
-		data, err := os.ReadFile(filepath.Join("testdata", "hr-ar", "upit.xml"))
-		require.NoError(t, err)
-		x := strings.Replace(string(data), "<cbc:Description>Upit o računu</cbc:Description>", "", 1)
+	roundTrip := func(t *testing.T, x string) (*bill.StatusLine, arAnswer) {
+		t.Helper()
 		doc, err := goblubl.Decode([]byte(x))
 		require.NoError(t, err)
 		env, err := goblubl.Import(doc)
@@ -180,11 +152,66 @@ func TestApplicationResponseCodes(t *testing.T) {
 		require.NoError(t, err)
 		xmlData, err := goblubl.Encode(out)
 		require.NoError(t, err)
+		checkResponseSpec(t, xmlData)
 		var res arDocument
 		require.NoError(t, xml.Unmarshal(xmlData, &res))
-		assert.Empty(t, res.Responses[0].Description)
-		assert.Equal(t, []string{"Nedostaje broj narudžbenice."}, res.Responses[0].StatusReasons)
+		return env.Extract().(*bill.Status).Lines[0], res.Responses[0]
+	}
+	refused := func(t *testing.T, x string, code string) {
+		t.Helper()
+		doc, err := goblubl.Decode([]byte(x))
+		require.NoError(t, err)
+		env, err := goblubl.Import(doc)
+		require.NoError(t, err)
+		err = env.Validate()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), code)
+	}
+
+	t.Run("query with a reason", func(t *testing.T) {
+		line, res := roundTrip(t, string(upit))
+		assert.Equal(t, bill.StatusLineQuerying, line.Key)
+		assert.Equal(t, []*bill.Reason{{Key: bill.ReasonKeyReferences}}, line.Reasons)
+		assert.Empty(t, line.Actions)
+		assert.Equal(t, []arCode{{ListID: "OPStatusReason", Value: "REF"}}, res.Reasons)
 	})
+	t.Run("query with an action", func(t *testing.T) {
+		x := strings.Replace(string(upit), reasonStatus,
+			`<cbc:StatusReasonCode listID="OPStatusAction">PIN</cbc:StatusReasonCode>`, 1)
+		line, res := roundTrip(t, x)
+		assert.Empty(t, line.Reasons)
+		assert.Equal(t, []*bill.Action{{Key: bill.ActionKeyProvide}}, line.Actions)
+		assert.Equal(t, []arCode{{ListID: "OPStatusAction", Value: "PIN"}}, res.Reasons)
+	})
+	t.Run("query with two statuses", func(t *testing.T) {
+		x := strings.Replace(string(upit), "</cac:Status>",
+			`</cac:Status><cac:Status><cbc:StatusReasonCode listID="OPStatusAction">PIN</cbc:StatusReasonCode></cac:Status>`, 1)
+		refused(t, x, "GOBL-HR-ERACUN-BILL-STATUS-11")
+	})
+	t.Run("rejection with another status", func(t *testing.T) {
+		x := strings.Replace(string(data), "</cac:Status>",
+			`</cac:Status><cac:Status><cbc:StatusReasonCode listID="OPStatusAction">NIN</cbc:StatusReasonCode></cac:Status>`, 1)
+		refused(t, x, "GOBL-HR-ERACUN-BILL-STATUS-11")
+	})
+
+	// Codes, lists and text the HR application response doesn't define are
+	// refused by name.
+	for _, tt := range []struct{ name, old, new, code string }{
+		{"unknown response code", ">RE<", ">XX<", "XX"},
+		{"unknown status list", `listID="MFINVrstaRazlogaOdbijanja"`, `listID="FOO"`, "FOO"},
+		{"unknown status reason", "MFINVrstaRazlogaOdbijanja\">U", "OPStatusReason\">ZZZ", "ZZZ"},
+		{"status text", "</cbc:StatusReasonCode>", "</cbc:StatusReasonCode><cbc:StatusReason>Tekst</cbc:StatusReason>", "Tekst"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			x := strings.Replace(string(data), tt.old, tt.new, 1)
+			require.NotEqual(t, string(data), x)
+			doc, err := goblubl.Decode([]byte(x))
+			require.NoError(t, err)
+			_, err = goblubl.Import(doc)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.code)
+		})
+	}
 
 	t.Run("acceptance with a rejection reason", func(t *testing.T) {
 		doc, err := goblubl.Decode([]byte(strings.Replace(string(data), ">RE<", ">AP<", 1)))

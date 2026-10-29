@@ -107,10 +107,12 @@ func checkResponseSpec(t *testing.T, data []byte) {
 		assert.Equal(t, "MFINVrstaRazlogaOdbijanja", r.Reasons[0].ListID, "AR-BT-12")
 		assert.Contains(t, []string{"N", "U", "O"}, r.Reasons[0].Value, "AR-BT-12")
 	} else {
+		assert.LessOrEqual(t, len(r.Reasons), 1, "AR-BG-5: at most one status")
 		for _, s := range r.Reasons {
-			assert.Contains(t, []string{"OPStatusReason", "OPStatusAction"}, s.ListID, "AR-BG-5: Peppol status clarifications by agreement")
+			assert.Contains(t, []string{"OPStatusReason", "OPStatusAction"}, s.ListID, "AR-BG-5: a Peppol status reason or action by agreement")
 		}
 	}
+	assert.Empty(t, r.StatusReasons, "AR-BG-5 has no status text")
 	assert.NotEmpty(t, r.DocID, "AR-BT-13")
 	assert.NotEmpty(t, r.DocIssueDate, "AR-BT-14")
 }

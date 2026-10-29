@@ -406,6 +406,14 @@ func TestStatusRules(t *testing.T) {
 		{"no invoice", func(st *bill.Status) { st.Lines[0].Doc = nil }, "GOBL-HR-ERACUN-BILL-STATUS-07"},
 		{"no invoice code", func(st *bill.Status) { st.Lines[0].Doc.Code = "" }, "GOBL-HR-ERACUN-BILL-STATUS-08"},
 		{"no invoice issue date", func(st *bill.Status) { st.Lines[0].Doc.IssueDate = nil }, "GOBL-HR-ERACUN-BILL-STATUS-09"},
+		{"rejection with an action", func(st *bill.Status) {
+			st.Lines[0].Actions = []*bill.Action{{Key: bill.ActionKeyReissue}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-11"},
+		{"rejection with another reason", func(st *bill.Status) {
+			st.Lines[0].Reasons = append(st.Lines[0].Reasons, &bill.Reason{Key: bill.ReasonKeyPrices})
+		}, "GOBL-HR-ERACUN-BILL-STATUS-11"},
+		{"update", func(st *bill.Status) { st.Type = bill.StatusTypeUpdate }, "GOBL-HR-ERACUN-BILL-STATUS-13"},
+		{"two invoices", func(st *bill.Status) { st.Lines = append(st.Lines, testStatus().Lines[0]) }, "GOBL-HR-ERACUN-BILL-STATUS-14"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -450,12 +458,39 @@ func TestStatusOtherResponses(t *testing.T) {
 		require.NoError(t, st.Calculate())
 		assertFault(t, st, "GOBL-HR-ERACUN-BILL-STATUS-10")
 	})
-	t.Run("querying with a reason and an action", func(t *testing.T) {
+
+	// The application response has one status, with a code and no text.
+	query := func(reasons []*bill.Reason, actions []*bill.Action) *bill.Status {
 		st := testStatus()
 		st.Lines[0].Key = bill.StatusLineQuerying
-		st.Lines[0].Reasons = []*bill.Reason{{Key: bill.ReasonKeyReferences, Description: "Nedostaje broj narudžbenice."}}
-		st.Lines[0].Actions = []*bill.Action{{Key: bill.ActionKeyProvide}}
+		st.Lines[0].Description = "Nedostaje broj narudžbenice."
+		st.Lines[0].Reasons = reasons
+		st.Lines[0].Actions = actions
+		return st
+	}
+	t.Run("querying with a reason", func(t *testing.T) {
+		st := query([]*bill.Reason{{Key: bill.ReasonKeyReferences}}, nil)
 		require.NoError(t, st.Calculate())
 		require.NoError(t, rules.Validate(st))
+	})
+	t.Run("querying with an action", func(t *testing.T) {
+		st := query(nil, []*bill.Action{{Key: bill.ActionKeyProvide}})
+		require.NoError(t, st.Calculate())
+		require.NoError(t, rules.Validate(st))
+	})
+	t.Run("querying with a reason and an action", func(t *testing.T) {
+		st := query([]*bill.Reason{{Key: bill.ReasonKeyReferences}}, []*bill.Action{{Key: bill.ActionKeyProvide}})
+		require.NoError(t, st.Calculate())
+		assertFault(t, st, "GOBL-HR-ERACUN-BILL-STATUS-11")
+	})
+	t.Run("querying with a reason text", func(t *testing.T) {
+		st := query([]*bill.Reason{{Key: bill.ReasonKeyReferences, Description: "Nedostaje broj narudžbenice."}}, nil)
+		require.NoError(t, st.Calculate())
+		assertFault(t, st, "GOBL-HR-ERACUN-BILL-STATUS-12")
+	})
+	t.Run("querying with an action text", func(t *testing.T) {
+		st := query(nil, []*bill.Action{{Key: bill.ActionKeyProvide, Description: "Pošaljite broj narudžbenice."}})
+		require.NoError(t, st.Calculate())
+		assertFault(t, st, "GOBL-HR-ERACUN-BILL-STATUS-12")
 	})
 }

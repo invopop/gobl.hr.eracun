@@ -23,13 +23,9 @@ xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponent
 	<cac:DocumentResponse>
 		<cac:Response>
 			<cbc:ResponseCode listID="UNCL4343OpSubset">UQ</cbc:ResponseCode>
-			<cbc:Description>Upit o računu</cbc:Description>
+			<cbc:Description>Nedostaje broj narudžbenice.</cbc:Description>
 			<cac:Status>
 				<cbc:StatusReasonCode listID="OPStatusReason">REF</cbc:StatusReasonCode>
-				<cbc:StatusReason>Nedostaje broj narudžbenice.</cbc:StatusReason>
-			</cac:Status>
-			<cac:Status>
-				<cbc:StatusReasonCode listID="OPStatusAction">PIN</cbc:StatusReasonCode>
 			</cac:Status>
 		</cac:Response>
 		<cac:DocumentReference>

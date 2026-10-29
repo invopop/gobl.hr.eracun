@@ -75,12 +75,14 @@ func newAddon() *tax.AddonDef {
 				own. Parties with a Croatian tax ID and no ISO 6523 endpoint are given
 				the eRačun network address 9934:<OIB>.
 
-				Statuses are application responses from the buyer about an invoice.
-				A rejection needs a description and one reason with an N, U or O
-				rejection reason code. The other Peppol invoice response codes
-				(accepted, acknowledged, processing, querying and paid) are sent only
-				by agreement with the supplier. They may carry a description and the
-				Peppol status reasons and actions, but no rejection reason code.
+				Statuses are application responses the buyer sends the supplier,
+				each with one line about one invoice. A rejection needs a
+				description and one reason with an N, U or O rejection reason code,
+				and nothing else. The other Peppol invoice response keys (accepted,
+				acknowledged, processing, querying and paid) are sent only by
+				agreement with the supplier, with an optional description and at
+				most one Peppol status reason or action, which has no text of its
+				own.
 			`),
 		},
 		Sources: []*cbc.Source{
