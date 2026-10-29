@@ -61,7 +61,10 @@
 				"code": "10000",
 				"country": "HR"
 			}
-		]
+		],
+		"registration": {
+			"other": "Tvrtka A d.o.o. osnovana na Trgovačkom sudu u ..."
+		}
 	},
 	"customer": {
 		"name": "Tvrtka B d.o.o.",

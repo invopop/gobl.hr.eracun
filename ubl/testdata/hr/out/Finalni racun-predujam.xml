@@ -36,6 +36,7 @@
       </cac:PartyTaxScheme>
       <cac:PartyLegalEntity>
         <cbc:RegistrationName>TVRTKA A d.o.o.</cbc:RegistrationName>
+        <cbc:CompanyLegalForm>Osnovano na trgovačkom sudu, temeljni kapital</cbc:CompanyLegalForm>
       </cac:PartyLegalEntity>
     </cac:Party>
     <cac:SellerContact>

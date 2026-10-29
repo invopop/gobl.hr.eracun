@@ -55,7 +55,10 @@
 				"code": "10000",
 				"country": "HR"
 			}
-		]
+		],
+		"registration": {
+			"other": "Osnovano na trgovačkom sudu, temeljni kapital"
+		}
 	},
 	"customer": {
 		"name": "Tvrtka B d.o.o.",

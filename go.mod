@@ -3,10 +3,9 @@ module github.com/invopop/gobl.hr.eracun
 go 1.25.0
 
 require (
-	github.com/invopop/gobl v0.510.0
+	github.com/invopop/gobl v0.511.0
 	github.com/invopop/gobl.ubl v0.94.0
 	github.com/invopop/phorm v0.1.5
-	github.com/invopop/xmlctx v0.14.0
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -23,6 +22,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/invopop/validation v0.8.0 // indirect
+	github.com/invopop/xmlctx v0.14.0 // indirect
 	github.com/invopop/xmldsig v0.14.0 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
@@ -44,5 +44,5 @@ require (
 // the README lists what each pin waits for.
 replace (
 	github.com/invopop/gobl => github.com/invopop/gobl v0.510.1-0.20261027164024-70ccde1c0e68
-	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.97.1-0.20261026145643-a45bc237723a
+	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.99.1-0.20261029141127-3894f5c96f32
 )

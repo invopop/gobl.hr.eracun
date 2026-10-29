@@ -34,11 +34,7 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 	importChargeExemptionReasons(in, inv)
 	importLineExemptionReasons(inv, lines)
 
-	data, err := findHRFISK20Data(in)
-	if err != nil {
-		return err
-	}
-	if data != nil && data.HRObracunPDVPoNaplati != "" {
+	if data, ok := goblubl.FindExtensionData[*HRFISK20Data](in.Extensions); ok && data.HRObracunPDVPoNaplati != "" {
 		inv.SetTags(append(inv.GetTags(), hr.TagCashBasis)...)
 	}
 	return nil

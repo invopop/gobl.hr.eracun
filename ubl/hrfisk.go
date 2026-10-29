@@ -1,11 +1,9 @@
 package ubl
 
 import (
-	"bytes"
 	"encoding/xml"
 
 	goblubl "github.com/invopop/gobl.ubl"
-	"github.com/invopop/xmlctx"
 )
 
 // NamespaceHRExtension is the namespace of the HR extension elements.
@@ -61,37 +59,17 @@ type HRLegalMonetaryTotal struct {
 	OutOfScopeOfVATAmount goblubl.Amount `xml:"hrextac:OutOfScopeOfVATAmount"`
 }
 
-// addHRFISK20Data adds the HR extension data to the invoice as its own UBL
-// extension.
-func addHRFISK20Data(out *goblubl.Invoice, data *HRFISK20Data) error {
-	data.Namespace = NamespaceHRExtension
-	raw, err := xml.Marshal(data)
-	if err != nil {
-		return err
+// ExtensionNamespaces implements goblubl.ExtensionData.
+func (*HRFISK20Data) ExtensionNamespaces() map[string]string {
+	return map[string]string{
+		"hrextac": NamespaceHRExtension,
+		"cbc":     goblubl.NamespaceCBC,
 	}
-	out.AddExtension(goblubl.NewRawExtension(raw))
-	return nil
 }
 
-// findHRFISK20Data provides the HR extension data of an imported invoice, if
-// any.
-func findHRFISK20Data(in *goblubl.Invoice) (*HRFISK20Data, error) {
-	if in.Extensions == nil {
-		return nil, nil
-	}
-	for _, e := range in.Extensions.Extension {
-		if e.ExtensionContent == nil || !bytes.Contains(e.ExtensionContent.Raw, []byte(NamespaceHRExtension)) {
-			continue
-		}
-		data := new(HRFISK20Data)
-		err := xmlctx.Unmarshal(e.ExtensionContent.Raw, data, xmlctx.WithNamespaces(map[string]string{
-			"hrextac": NamespaceHRExtension,
-			"cbc":     goblubl.NamespaceCBC,
-		}))
-		if err != nil {
-			return nil, err
-		}
-		return data, nil
-	}
-	return nil, nil
+// addHRFISK20Data adds the HR extension data to the invoice as its own UBL
+// extension.
+func addHRFISK20Data(out *goblubl.Invoice, data *HRFISK20Data) {
+	data.Namespace = NamespaceHRExtension
+	out.AddExtension(goblubl.NewExtension(data))
 }

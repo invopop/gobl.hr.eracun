@@ -25,6 +25,7 @@
       <cac:PartyLegalEntity>
         <cbc:RegistrationName>TVRTKA A d.o.o.</cbc:RegistrationName>
         <cbc:CompanyID>12345678903</cbc:CompanyID>
+        <cbc:CompanyLegalForm>Osnovano na trgovačkom sudu, temeljni kapital</cbc:CompanyLegalForm>
       </cac:PartyLegalEntity>
     </cac:Party>
     <cac:SellerContact>

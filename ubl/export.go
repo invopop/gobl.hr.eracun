@@ -314,7 +314,8 @@ func exportHRFISK20Data(inv *bill.Invoice, out *goblubl.Invoice) error {
 	if data.HRObracunPDVPoNaplati == "" && data.HRTaxTotal == nil {
 		return nil
 	}
-	return addHRFISK20Data(out, data)
+	addHRFISK20Data(out, data)
+	return nil
 }
 
 func vatTotal(inv *bill.Invoice) *tax.CategoryTotal {

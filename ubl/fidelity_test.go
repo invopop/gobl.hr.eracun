@@ -26,10 +26,7 @@ var pendingDifferences = []struct {
 	path   string
 	lost   bool
 	reason string
-}{
-	{"/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyLegalForm", true,
-		"BT-33, which gobl.ubl doesn't map to GOBL yet"},
-}
+}{}
 
 // TestExamplesKeepContent checks that exporting an imported HR CIUS invoice
 // gives back what the original said: every element value and attribute of

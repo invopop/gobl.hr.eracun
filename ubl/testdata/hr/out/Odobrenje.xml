@@ -35,6 +35,7 @@
       </cac:PartyTaxScheme>
       <cac:PartyLegalEntity>
         <cbc:RegistrationName>Tvrtka A d.o.o.</cbc:RegistrationName>
+        <cbc:CompanyLegalForm>Tvrtka A d.o.o. osnovana na Trgovačkom sudu u ...</cbc:CompanyLegalForm>
       </cac:PartyLegalEntity>
     </cac:Party>
     <cac:SellerContact>
