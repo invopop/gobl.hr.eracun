@@ -106,6 +106,16 @@ examples do. The operator is not written as the seller's contact (BG-6).
 Correcting an invoice with GOBL leaves out the original operator, so the
 corrective document needs its own.
 
+## Issue time
+
+An eRačun gives the time it was issued (HR-BR-2). An invoice with no
+`issue_time` that is dated today in Croatia, or not dated at all, is given the
+current date and time in Croatia (Europe/Zagreb). An invoice dated another day
+is rejected until its `issue_time` is given. Correcting an invoice with GOBL
+issues the corrective document now, so it doesn't keep the original's issue
+time; if the correction is given an issue date other than today, set its
+`issue_time` too.
+
 ## Validation
 
 Rules register under the `HR-ERACUN` namespace, guarded so they apply only when

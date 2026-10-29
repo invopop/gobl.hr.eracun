@@ -55,25 +55,53 @@ var invoiceCorrectionDefinitions = tax.CorrectionSet{
 // document, which names the person who issued it (Art. 8(1) of the
 // Fiscalisation Act), so the rules ask for a new one. The whole person goes,
 // so they aren't written as the seller's contact (BG-6) instead.
+//
+// The corrective document is issued now, so the original's issue time goes
+// too. Without an issue date option GOBL dates it today in UTC, so that date
+// goes as well, and both are set again from the time in Croatia.
 type billCorrectionNormalizer struct{}
 
 func (*billCorrectionNormalizer) Normalize(doc any) {
 	in, ok := doc.(*bill.CorrectionNormalize)
-	if !ok || in.Invoice.Supplier == nil {
+	if !ok {
 		return
 	}
-	sup := in.Invoice.Supplier
-	sup.People = slices.DeleteFunc(sup.People, func(p *org.Person) bool {
-		return isOperator(p)
-	})
+	in.Invoice.IssueTime = nil
+	if in.Opts.IssueDate == nil {
+		in.Invoice.IssueDate = cal.Date{}
+	}
+	if sup := in.Invoice.Supplier; sup != nil {
+		sup.People = slices.DeleteFunc(sup.People, func(p *org.Person) bool {
+			return isOperator(p)
+		})
+	}
 }
 
 func normalizeInvoice(inv *bill.Invoice) {
 	if inv == nil {
 		return
 	}
+	normalizeIssueTime(inv)
 	normalizePartyEndpoint(inv.Supplier)
 	normalizePartyEndpoint(inv.Customer)
+}
+
+// normalizeIssueTime sets the issue time HR-BR-2 requires to the current
+// time in Croatia when the invoice is issued now: it has no issue time, and
+// its issue date is empty or today. The issue date is set from the same
+// moment. GOBL fills in only the date. An invoice dated another day keeps its
+// empty time, which rule 02 then asks for.
+func normalizeIssueTime(inv *bill.Invoice) {
+	if inv.IssueTime != nil {
+		return
+	}
+	now := cal.ThisSecondIn(tax.RegimeDefFor(l10n.HR).TimeLocation())
+	if !inv.IssueDate.IsZero() && inv.IssueDate != now.Date() {
+		return
+	}
+	t := now.Time()
+	inv.IssueDate = now.Date()
+	inv.IssueTime = &t
 }
 
 // normalizePartyEndpoint gives a party with a Croatian tax ID its eRačun
@@ -103,7 +131,7 @@ func billInvoiceRules() *rules.Set {
 			),
 		),
 		rules.Field("issue_time",
-			rules.Assert("02", "invoice issue time is required (HR-BR-2)", is.Present),
+			rules.Assert("02", "invoice issue time is required for an invoice not dated today in Croatia (HR-BR-2)", is.Present),
 		),
 		rules.Field("tax",
 			rules.Assert("03", "invoice tax is required", is.Present),

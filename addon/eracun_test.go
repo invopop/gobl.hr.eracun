@@ -8,6 +8,7 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
 	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/pay"
@@ -327,6 +328,7 @@ func TestCorrectionWithNewOperator(t *testing.T) {
 		Name:       &org.Name{Given: "Operater2"},
 		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}},
 	})
+	inv.IssueTime = cal.NewTime(9, 0, 0)
 	require.NoError(t, inv.Calculate())
 	require.NoError(t, rules.Validate(inv))
 }
@@ -492,5 +494,81 @@ func TestStatusOtherResponses(t *testing.T) {
 		st := query(nil, []*bill.Action{{Key: bill.ActionKeyProvide, Description: "Pošaljite broj narudžbenice."}})
 		require.NoError(t, st.Calculate())
 		assertFault(t, st, "GOBL-HR-ERACUN-BILL-STATUS-12")
+	})
+}
+
+// nowInCroatia gives the current date and time in Croatia, as the issue time
+// normalizer sees it.
+func nowInCroatia() cal.DateTime {
+	return cal.ThisSecondIn(tax.RegimeDefFor(l10n.HR).TimeLocation())
+}
+
+// assertIssuedNow checks the invoice has the issue date and time of a moment
+// between before and now, in Croatia.
+func assertIssuedNow(t *testing.T, inv *bill.Invoice, before cal.DateTime) {
+	t.Helper()
+	after := nowInCroatia()
+	require.NotNil(t, inv.IssueTime)
+	got := inv.IssueDate.WithTime(*inv.IssueTime)
+	assert.False(t, got.Before(before.DateTime), "issued %s before %s", got, before)
+	assert.False(t, got.After(after.DateTime), "issued %s after %s", got, after)
+}
+
+func TestInvoiceIssueTime(t *testing.T) {
+	t.Run("no issue date or time", func(t *testing.T) {
+		inv := testInvoice()
+		inv.IssueDate = cal.Date{}
+		inv.IssueTime = nil
+		before := nowInCroatia()
+		require.NoError(t, inv.Calculate())
+		assertIssuedNow(t, inv, before)
+		require.NoError(t, rules.Validate(inv))
+	})
+	t.Run("dated today without a time", func(t *testing.T) {
+		before := nowInCroatia()
+		inv := testInvoice()
+		inv.IssueDate = before.Date()
+		inv.IssueTime = nil
+		require.NoError(t, inv.Calculate())
+		assertIssuedNow(t, inv, before)
+		require.NoError(t, rules.Validate(inv))
+	})
+	t.Run("dated another day without a time", func(t *testing.T) {
+		inv := testInvoice()
+		inv.IssueTime = nil
+		require.NoError(t, inv.Calculate())
+		assert.Equal(t, "2026-03-01", inv.IssueDate.String())
+		assert.Nil(t, inv.IssueTime)
+		assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-02")
+	})
+	t.Run("time kept", func(t *testing.T) {
+		inv := testInvoice()
+		inv.IssueDate = cal.Date{}
+		inv.IssueTime = cal.NewTime(0, 0, 0)
+		require.NoError(t, inv.Calculate())
+		assert.Equal(t, "00:00:00", inv.IssueTime.String())
+	})
+}
+
+func TestCorrectionIssueTime(t *testing.T) {
+	t.Run("issued now", func(t *testing.T) {
+		inv := testInvoice()
+		require.NoError(t, inv.Calculate())
+		before := nowInCroatia()
+		require.NoError(t, inv.Correct(bill.Credit))
+		assertIssuedNow(t, inv, before)
+	})
+	t.Run("normalizer clears the original issue date and time", func(t *testing.T) {
+		inv := testInvoice()
+		def := tax.AddonForKey(eracun.V1).Corrections.Def(bill.ShortSchemaInvoice)
+		def.Normalizer.Normalize(&bill.CorrectionNormalize{Opts: new(bill.CorrectionOptions), Invoice: inv})
+		assert.True(t, inv.IssueDate.IsZero())
+		assert.Nil(t, inv.IssueTime)
+	})
+	t.Run("issue date option", func(t *testing.T) {
+		inv := testCorrectedInvoice(t)
+		assert.Equal(t, "2026-03-15", inv.IssueDate.String())
+		assert.Nil(t, inv.IssueTime)
+		assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-02")
 	})
 }

@@ -75,6 +75,11 @@ func newAddon() *tax.AddonDef {
 				own. Parties with a Croatian tax ID and no ISO 6523 endpoint are given
 				the eRačun network address 9934:<OIB>.
 
+				An invoice with no issue time, dated today or not dated at all, is
+				given the current date and time in Croatia. An invoice dated another
+				day needs its issue time. A corrective document is issued now, so it
+				doesn't keep the original's issue time.
+
 				Statuses are application responses the buyer sends the supplier,
 				each with one line about one invoice. A rejection needs a
 				description and one reason with an N, U or O rejection reason code,
