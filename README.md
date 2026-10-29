@@ -134,7 +134,7 @@ Tax Administration's schematron, which the tests run (see below).
 | Module | Waits for | Replaced by | Pin |
 | --- | --- | --- | --- |
 | `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite on the Slovakia template, which [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) now carries) | branch commit `70ccde1c` | the gobl release that includes it, or a `main` pseudo-version after merge |
-| `github.com/invopop/gobl.ubl` | the `ExtensionContent` fix that registers extension data types ([invopop/gobl.ubl#183](https://github.com/invopop/gobl.ubl/pull/183), branch `extension-content-any`), then the generic fields the HR format uses (`SellerContact`, tax category `Name`), restacked on that fix ([invopop/gobl.ubl#179](https://github.com/invopop/gobl.ubl/pull/179), branch `eu3-18-hr-fields`) | branch commit `6a6d1e1`, the head of #179 (with #183 merged in) | the gobl.ubl release that includes both |
+| `github.com/invopop/gobl.ubl` | the `ExtensionContent` fix that registers extension data types ([invopop/gobl.ubl#183](https://github.com/invopop/gobl.ubl/pull/183), branch `extension-content-any`), then the generic fields the HR format uses (`SellerContact`, tax category `Name`), restacked on that fix ([invopop/gobl.ubl#179](https://github.com/invopop/gobl.ubl/pull/179), branch `eu3-18-hr-fields`) | branch commit `e1af3b2`, the head of #179 (with #183 merged in) | the gobl.ubl release that includes both |
 
 To follow a newer commit of either branch, run for example
 `go mod edit -replace=github.com/invopop/gobl=github.com/invopop/gobl@<commit>`
