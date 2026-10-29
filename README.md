@@ -23,8 +23,10 @@ The module provides:
 - the UBL format `ubl+hr-eracun-v1` for invoices and credit notes, validated
   with the Tax Administration's rules `hr.gov.porezna.eracun:ubl-invoice:1.0.4`
   and `hr.gov.porezna.eracun:ubl-creditnote:1.0.4`;
-- the application response a buyer sends to reject an eRačun
-  (`urn:mfin.gov.hr:AplikacijskiOdgovor-2025:1.0`), mapped to `bill.Status`.
+- the application response a buyer sends about an eRačun
+  (`urn:mfin.gov.hr:AplikacijskiOdgovor-2025:1.0`), mapped to `bill.Status`:
+  the rejection, and by agreement between the parties the other Peppol invoice
+  response codes.
 
 The Croatian tax regime itself (`regimes/hr`) lives in GOBL core. This module
 only carries the eRačun addon and format, so that only projects handling
@@ -157,7 +159,8 @@ Administration, patched so that they pass the HR rules: a valid OIB in place
 of the placeholder, 2026 dates and a KPD on the leasing line.
 [ubl/testdata/hr/README.md](ubl/testdata/hr/README.md) lists the changes.
 `ubl/testdata/hr-ar/` holds the rejection example of the application response
-specification, with placeholder OIBs
+specification and an acceptance and a query built from it, with placeholder
+OIBs
 ([README](ubl/testdata/hr-ar/README.md)). They are official sample values,
 not customer data.
 

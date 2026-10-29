@@ -382,7 +382,8 @@ func TestStatusRules(t *testing.T) {
 			st.Customer.TaxID = &tax.Identity{Country: "HR"}
 			st.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
 		}, "GOBL-HR-ERACUN-BILL-STATUS-03"},
-		{"accepted", func(st *bill.Status) { st.Lines[0].Key = bill.StatusLineAccepted }, "GOBL-HR-ERACUN-BILL-STATUS-04"},
+		{"error", func(st *bill.Status) { st.Lines[0].Key = bill.StatusLineError }, "GOBL-HR-ERACUN-BILL-STATUS-04"},
+		{"issued", func(st *bill.Status) { st.Lines[0].Key = bill.StatusLineIssued }, "GOBL-HR-ERACUN-BILL-STATUS-04"},
 		{"no description", func(st *bill.Status) { st.Lines[0].Description = "" }, "GOBL-HR-ERACUN-BILL-STATUS-05"},
 		{"no rejection reason", func(st *bill.Status) { st.Lines[0].Reasons[0].Ext = tax.Extensions{} }, "GOBL-HR-ERACUN-BILL-STATUS-06"},
 		{"two rejection reasons", func(st *bill.Status) {
@@ -407,6 +408,41 @@ func TestStatusRules(t *testing.T) {
 		st := testStatus()
 		st.Lines[0].Description = ""
 		st.Lines[0].Reasons[0].Description = "Tekst razloga odbijanja"
+		require.NoError(t, st.Calculate())
+		require.NoError(t, rules.Validate(st))
+	})
+}
+
+func TestStatusOtherResponses(t *testing.T) {
+	keys := []cbc.Key{
+		bill.StatusLineAccepted,
+		bill.StatusLineAcknowledged,
+		bill.StatusLineProcessing,
+		bill.StatusLineQuerying,
+		bill.StatusLinePaid,
+	}
+	for _, key := range keys {
+		t.Run(key.String(), func(t *testing.T) {
+			st := testStatus()
+			st.Lines[0].Key = key
+			st.Lines[0].Description = ""
+			st.Lines[0].Reasons = nil
+			require.NoError(t, st.Calculate())
+			require.NoError(t, rules.Validate(st))
+		})
+	}
+
+	t.Run("accepted with a rejection reason", func(t *testing.T) {
+		st := testStatus()
+		st.Lines[0].Key = bill.StatusLineAccepted
+		require.NoError(t, st.Calculate())
+		assertFault(t, st, "GOBL-HR-ERACUN-BILL-STATUS-10")
+	})
+	t.Run("querying with a reason and an action", func(t *testing.T) {
+		st := testStatus()
+		st.Lines[0].Key = bill.StatusLineQuerying
+		st.Lines[0].Reasons = []*bill.Reason{{Key: bill.ReasonKeyReferences, Description: "Nedostaje broj narudžbenice."}}
+		st.Lines[0].Actions = []*bill.Action{{Key: bill.ActionKeyProvide}}
 		require.NoError(t, st.Calculate())
 		require.NoError(t, rules.Validate(st))
 	})

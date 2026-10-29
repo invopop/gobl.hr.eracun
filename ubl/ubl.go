@@ -24,8 +24,8 @@ const KeyHRCIUS cbc.Key = "ubl+hr-eracun-v1"
 const CustomizationID = "urn:cen.eu:en16931:2017#compliant#urn:mfin.gov.hr:cius-2025:1.0#conformant#urn:mfin.gov.hr:ext-2025:1.0"
 
 // FormatHRCIUS defines the format of Croatian eRačun invoices, and of the
-// application responses that reject them. The ProfileID of an invoice is its
-// business process, so it is not part of the format.
+// application responses buyers send about them. The ProfileID of an invoice
+// is its business process, so it is not part of the format.
 var FormatHRCIUS = goblubl.Format{
 	Key:             KeyHRCIUS,
 	Name:            i18n.NewString("UBL HR CIUS 2025"),

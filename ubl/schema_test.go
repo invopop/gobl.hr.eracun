@@ -59,11 +59,12 @@ type arDocument struct {
 }
 
 type arAnswer struct {
-	Code         arCode   `xml:"Response>ResponseCode"`
-	Description  string   `xml:"Response>Description"`
-	Reasons      []arCode `xml:"Response>Status>StatusReasonCode"`
-	DocID        string   `xml:"DocumentReference>ID"`
-	DocIssueDate string   `xml:"DocumentReference>IssueDate"`
+	Code          arCode   `xml:"Response>ResponseCode"`
+	Description   string   `xml:"Response>Description"`
+	Reasons       []arCode `xml:"Response>Status>StatusReasonCode"`
+	StatusReasons []string `xml:"Response>Status>StatusReason"`
+	DocID         string   `xml:"DocumentReference>ID"`
+	DocIssueDate  string   `xml:"DocumentReference>IssueDate"`
 }
 
 type arCode struct {
@@ -72,10 +73,10 @@ type arCode struct {
 	Value    string `xml:",chardata"`
 }
 
-// checkRejectionSpec checks a rejection against the values that the HR
-// application response specification fixes (section 2, AR-BT-1 to AR-BT-14).
-// The UBL 2.1 schema says nothing about them.
-func checkRejectionSpec(t *testing.T, data []byte) {
+// checkResponseSpec checks an application response against the values that
+// the HR application response specification fixes (section 2, AR-BT-1 to
+// AR-BT-14). The UBL 2.1 schema says nothing about them.
+func checkResponseSpec(t *testing.T, data []byte) {
 	t.Helper()
 
 	const specID = "urn:mfin.gov.hr:AplikacijskiOdgovor-2025:1.0"
@@ -99,11 +100,17 @@ func checkRejectionSpec(t *testing.T, data []byte) {
 	require.Len(t, doc.Responses, 1)
 	r := doc.Responses[0]
 	assert.Equal(t, "UNCL4343OpSubset", r.Code.ListID, "AR-BT-10")
-	assert.Equal(t, "RE", r.Code.Value, "AR-BT-10: rejection")
-	assert.NotEmpty(t, r.Description, "AR-BT-11 is required to reject")
-	require.Len(t, r.Reasons, 1, "AR-BG-5 is required to reject")
-	assert.Equal(t, "MFINVrstaRazlogaOdbijanja", r.Reasons[0].ListID, "AR-BT-12")
-	assert.Contains(t, []string{"N", "U", "O"}, r.Reasons[0].Value, "AR-BT-12")
+	assert.Contains(t, []string{"AB", "IP", "UQ", "CA", "RE", "AP", "PD"}, r.Code.Value, "AR-BT-10: Peppol invoice response codes")
+	if r.Code.Value == "RE" {
+		assert.NotEmpty(t, r.Description, "AR-BT-11 is required to reject")
+		require.Len(t, r.Reasons, 1, "AR-BG-5 is required to reject")
+		assert.Equal(t, "MFINVrstaRazlogaOdbijanja", r.Reasons[0].ListID, "AR-BT-12")
+		assert.Contains(t, []string{"N", "U", "O"}, r.Reasons[0].Value, "AR-BT-12")
+	} else {
+		for _, s := range r.Reasons {
+			assert.Contains(t, []string{"OPStatusReason", "OPStatusAction"}, s.ListID, "AR-BG-5: Peppol status clarifications by agreement")
+		}
+	}
 	assert.NotEmpty(t, r.DocID, "AR-BT-13")
 	assert.NotEmpty(t, r.DocIssueDate, "AR-BT-14")
 }
