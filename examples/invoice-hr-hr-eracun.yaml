@@ -19,10 +19,11 @@ supplier:
   people:
     - key: operator
       name:
-        given: "Operater1"
+        given: "Ivan"
+        surname: "Horvat"
       identities:
         - type: OIB
-          code: "12345678903"
+          code: "22222222226"
   addresses:
     - street: "Ulica 1"
       locality: "Zagreb"

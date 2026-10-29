@@ -4,7 +4,7 @@
 		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
 		"dig": {
 			"alg": "sha256",
-			"val": "04ffc24725383f6689007958d7d2e209bab3d34570894ebb8a77496bebfee1de"
+			"val": "7f13ed9c5258c7ace79e57a370f84c3083ecc55ca8d7cae257ad8995ef3b6dcf"
 		},
 		"from": "iso6523-actorid-upis::9934:12345678903",
 		"to": "iso6523-actorid-upis::9934:11111111119"
@@ -44,12 +44,13 @@
 				{
 					"key": "operator",
 					"name": {
-						"given": "Operater1"
+						"given": "Ivan",
+						"surname": "Horvat"
 					},
 					"identities": [
 						{
 							"type": "OIB",
-							"code": "12345678903"
+							"code": "22222222226"
 						}
 					]
 				}
