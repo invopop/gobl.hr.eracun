@@ -247,6 +247,10 @@ func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 		return lost && isOne(l.value)
 	case strings.HasSuffix(l.path, "/cac:Price/cbc:BaseQuantity/@unitCode"):
 		return lost && allOne(original, strings.TrimSuffix(l.path, "/@unitCode"))
+	case strings.HasSuffix(l.path, "/hrextac:HRObracunPDVPoNaplati"):
+		// Only the flag's presence carries meaning, and the export writes the
+		// VAT Act wording whatever the original said.
+		return slices.ContainsFunc(other, func(o leaf) bool { return o.path == l.path })
 	case strings.HasSuffix(l.path, "/cac:PartyName/cbc:Name") && !lost:
 		legal := strings.TrimSuffix(l.path, "/cac:PartyName/cbc:Name") + "/cac:PartyLegalEntity/cbc:RegistrationName"
 		if hasLeaf(original, leaf{legal, l.value}) {

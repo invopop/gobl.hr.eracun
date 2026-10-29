@@ -12,8 +12,10 @@ import (
 const NamespaceHRExtension = "urn:mfin.gov.hr:schema:xsd:HRExtensionAggregateComponents-1"
 
 // cashBasisText is the HRObracunPDVPoNaplati text of an invoice whose VAT is
-// accounted for when it is paid.
-const cashBasisText = "Obračun po naplaćenoj naknadi"
+// accounted for when it is paid, in the wording the VAT Act prescribes and
+// the regime's cash basis note uses. The official example has a shorter
+// variant; only the element's presence carries meaning.
+const cashBasisText = "Obračun prema naplaćenim naknadama"
 
 // HRFISK20Data holds the HR extension data of an invoice (HR-BG-1): the VAT
 // breakdown that puts POVNAK, PP, PPMV and N amounts outside the VAT base,
