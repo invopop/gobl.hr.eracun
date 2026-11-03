@@ -1,0 +1,214 @@
+{
+	"$regime": "HR",
+	"$addons": [
+		"eu-en16931-v2017",
+		"hr-eracun-v1"
+	],
+	"uuid": "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a2",
+	"type": "other",
+	"code": "15-1-1",
+	"issue_date": "2026-10-01",
+	"issue_time": "12:00:00",
+	"currency": "EUR",
+	"tax": {
+		"rounding": "currency",
+		"ext": {
+			"hr-eracun-process": "P1",
+			"untdid-document-type": "394"
+		},
+		"notes": [
+			{
+				"cat": "VAT",
+				"key": "exempt",
+				"text": "#HR:PPMV#Posebni porez na motorna vozila",
+				"ext": {
+					"untdid-tax-category": "E"
+				}
+			}
+		]
+	},
+	"supplier": {
+		"name": "TVRTKA A d.o.o.",
+		"tax_id": {
+			"country": "HR",
+			"code": "12345678903"
+		},
+		"people": [
+			{
+				"key": "operator",
+				"name": {
+					"given": "Operater1"
+				},
+				"identities": [
+					{
+						"type": "OIB",
+						"code": "12345678903"
+					}
+				]
+			}
+		],
+		"endpoints": [
+			{
+				"uri": "iso6523-actorid-upis::9934:12345678903"
+			}
+		],
+		"inboxes": [
+			{
+				"scheme": "9934",
+				"code": "12345678903"
+			}
+		],
+		"addresses": [
+			{
+				"street": "Ulica 1",
+				"locality": "ZAGREB",
+				"code": "10000",
+				"country": "HR"
+			}
+		],
+		"registration": {
+			"other": "Osnovano na trgovačkom sudu, temeljni kapital"
+		}
+	},
+	"customer": {
+		"name": "Tvrtka B d.o.o.",
+		"tax_id": {
+			"country": "HR",
+			"code": "11111111119"
+		},
+		"endpoints": [
+			{
+				"uri": "iso6523-actorid-upis::9934:11111111119"
+			}
+		],
+		"inboxes": [
+			{
+				"scheme": "9934",
+				"code": "11111111119"
+			}
+		],
+		"addresses": [
+			{
+				"street": "Ulica 2",
+				"locality": "RIJEKA",
+				"code": "51000",
+				"country": "HR"
+			}
+		]
+	},
+	"lines": [
+		{
+			"i": 1,
+			"quantity": "1.000",
+			"item": {
+				"name": "Automobil",
+				"identities": [
+					{
+						"label": "CG",
+						"code": "77.11.01"
+					}
+				],
+				"price": "10000.000000",
+				"unit": "piece",
+				"ext": {
+					"untdid-unit": "H87"
+				}
+			},
+			"sum": "10000.00",
+			"taxes": [
+				{
+					"cat": "VAT",
+					"key": "standard",
+					"percent": "25%",
+					"ext": {
+						"hr-eracun-tax-category": "PDV25",
+						"untdid-tax-category": "S"
+					}
+				}
+			],
+			"total": "10000.00"
+		}
+	],
+	"charges": [
+		{
+			"i": 1,
+			"reason": "#HR:PPMV#Posebni porez na motorna vozila",
+			"amount": "2000.00",
+			"taxes": [
+				{
+					"cat": "VAT",
+					"key": "exempt",
+					"ext": {
+						"hr-eracun-tax-category": "PPMV",
+						"untdid-tax-category": "E"
+					}
+				}
+			],
+			"meta": {
+				"hr-eracun-tax-exemption-reason": "Posebni porez na motorna vozila"
+			}
+		}
+	],
+	"payment": {
+		"terms": {
+			"due_dates": [
+				{
+					"date": "2026-10-01",
+					"amount": "14500.00",
+					"percent": "100%"
+				}
+			]
+		},
+		"instructions": {
+			"key": "credit-transfer",
+			"detail": "Opis plaćanja",
+			"ref": "HR00 123456",
+			"credit_transfer": [
+				{
+					"iban": "HRXXXXXXXXXXXXXXXX"
+				}
+			],
+			"ext": {
+				"untdid-payment-means": "30"
+			}
+		}
+	},
+	"totals": {
+		"sum": "10000.00",
+		"charge": "2000.00",
+		"total": "12000.00",
+		"taxes": {
+			"categories": [
+				{
+					"code": "VAT",
+					"rates": [
+						{
+							"key": "standard",
+							"ext": {
+								"hr-eracun-tax-category": "PDV25",
+								"untdid-tax-category": "S"
+							},
+							"base": "10000.00",
+							"percent": "25%",
+							"amount": "2500.00"
+						},
+						{
+							"key": "exempt",
+							"ext": {
+								"hr-eracun-tax-category": "PPMV",
+								"untdid-tax-category": "E"
+							},
+							"base": "2000.00",
+							"amount": "0.00"
+						}
+					],
+					"amount": "2500.00"
+				}
+			],
+			"sum": "2500.00"
+		},
+		"tax": "2500.00",
+		"total_with_tax": "14500.00",
+		"payable": "14500.00"
+	}
+}

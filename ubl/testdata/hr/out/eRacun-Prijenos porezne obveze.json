@@ -1,0 +1,185 @@
+{
+	"$regime": "HR",
+	"$addons": [
+		"eu-en16931-v2017",
+		"hr-eracun-v1"
+	],
+	"uuid": "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a2",
+	"type": "standard",
+	"code": "1-P1-1",
+	"issue_date": "2026-12-01",
+	"issue_time": "12:00:00",
+	"currency": "EUR",
+	"tax": {
+		"rounding": "currency",
+		"ext": {
+			"hr-eracun-process": "P1",
+			"untdid-document-type": "380"
+		},
+		"notes": [
+			{
+				"cat": "VAT",
+				"key": "reverse-charge",
+				"text": "Prijenos porezne obveze čl...",
+				"ext": {
+					"untdid-tax-category": "AE"
+				}
+			}
+		]
+	},
+	"supplier": {
+		"name": "TVRTKA A d.o.o.",
+		"tax_id": {
+			"country": "HR",
+			"code": "12345678903"
+		},
+		"people": [
+			{
+				"key": "operator",
+				"name": {
+					"given": "Operater1"
+				},
+				"identities": [
+					{
+						"type": "OIB",
+						"code": "12345678903"
+					}
+				]
+			}
+		],
+		"endpoints": [
+			{
+				"uri": "iso6523-actorid-upis::9934:12345678903"
+			}
+		],
+		"inboxes": [
+			{
+				"scheme": "9934",
+				"code": "12345678903"
+			}
+		],
+		"addresses": [
+			{
+				"street": "Ulica 1",
+				"locality": "ZAGREB",
+				"code": "10000",
+				"country": "HR"
+			}
+		],
+		"registration": {
+			"other": "Osnovano na trgovačkom sudu, temeljni kapital"
+		}
+	},
+	"customer": {
+		"name": "Tvrtka B d.o.o.",
+		"tax_id": {
+			"country": "HR",
+			"code": "11111111119"
+		},
+		"endpoints": [
+			{
+				"uri": "iso6523-actorid-upis::9934:11111111119"
+			}
+		],
+		"inboxes": [
+			{
+				"scheme": "9934",
+				"code": "11111111119"
+			}
+		],
+		"addresses": [
+			{
+				"street": "Ulica 2",
+				"locality": "RIJEKA",
+				"code": "51000",
+				"country": "HR"
+			}
+		]
+	},
+	"lines": [
+		{
+			"i": 1,
+			"quantity": "1.000",
+			"item": {
+				"name": "Proizvod",
+				"identities": [
+					{
+						"label": "CG",
+						"code": "62.20.20"
+					}
+				],
+				"price": "100.000000",
+				"unit": "piece",
+				"ext": {
+					"untdid-unit": "H87"
+				}
+			},
+			"sum": "100.00",
+			"taxes": [
+				{
+					"cat": "VAT",
+					"key": "reverse-charge",
+					"ext": {
+						"hr-eracun-tax-category": "AE",
+						"untdid-tax-category": "AE"
+					}
+				}
+			],
+			"total": "100.00"
+		}
+	],
+	"payment": {
+		"terms": {
+			"due_dates": [
+				{
+					"date": "2026-12-31",
+					"amount": "100.00",
+					"percent": "100%"
+				}
+			]
+		},
+		"instructions": {
+			"key": "credit-transfer",
+			"detail": "Opis plaćanja",
+			"ref": "HR00 123456",
+			"credit_transfer": [
+				{
+					"iban": "HRXXXXXXXXXXXXXXXX"
+				}
+			],
+			"ext": {
+				"untdid-payment-means": "30"
+			}
+		}
+	},
+	"delivery": {
+		"date": "2026-09-25"
+	},
+	"totals": {
+		"sum": "100.00",
+		"total": "100.00",
+		"taxes": {
+			"categories": [
+				{
+					"code": "VAT",
+					"rates": [
+						{
+							"key": "reverse-charge",
+							"ext": {
+								"hr-eracun-tax-category": "AE",
+								"untdid-tax-category": "AE"
+							},
+							"base": "100.00",
+							"amount": "0.00"
+						}
+					],
+					"amount": "0.00"
+				}
+			],
+			"sum": "0.00"
+		},
+		"tax": "0.00",
+		"total_with_tax": "100.00",
+		"payable": "100.00"
+	}
+}
