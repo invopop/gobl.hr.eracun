@@ -21,6 +21,9 @@ func Sign(cert *Certificate, req *InvoiceRequest) ([]byte, error) {
 	if cert == nil || cert.Cert == nil || cert.Key == nil {
 		return nil, errors.New("no certificate")
 	}
+	if req == nil {
+		return nil, errors.New("no request")
+	}
 	if req.ID == "" {
 		return nil, errors.New("the request has no Id to reference")
 	}

@@ -65,9 +65,11 @@ func TestSign(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("needs a certificate and an Id", func(t *testing.T) {
+	t.Run("needs a certificate, a request and an Id", func(t *testing.T) {
 		_, err := Sign(nil, testRequest())
 		assert.EqualError(t, err, "no certificate")
+		_, err = Sign(cert, nil)
+		assert.EqualError(t, err, "no request")
 		req := testRequest()
 		req.ID = ""
 		_, err = Sign(cert, req)
