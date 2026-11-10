@@ -28,6 +28,10 @@ The module provides:
   the rejection, and by agreement between the parties the other Peppol invoice
   response codes.
 
+The module also fiscalizes B2C receipts (Fiscalization 1.0, "fiskalizacija u
+krajnjoj potrošnji") with the Tax Administration's receipt service, in
+`racun/`.
+
 The Croatian tax regime itself (`regimes/hr`) lives in GOBL core. This module
 only carries the eRačun addon and format, so that only projects handling
 Croatian eRačuni take on their weight.
@@ -43,6 +47,11 @@ Croatian eRačuni take on their weight.
   the HR tax categories, the operator (`SellerContact`) and the
   `hrextac:HRFISK20Data` extension; import reads the process, operator, HR
   tax categories and cash-basis flag back into GOBL.
+- `racun/` — B2C receipts: builds the receipt (`RacunZahtjev`) from a GOBL
+  invoice, computes its ZKI (the issuer's protection code), signs it with
+  XML-DSig, and sends it to CIS, checking CIS's signed answer for the JIR.
+  The premises and device labels, the operator's OIB and the numbering scope
+  come from `Options` until a B2C addon carries them.
 - the module root is reserved for other eRačun tooling built on top of the
   addon.
 
@@ -151,6 +160,34 @@ place cannot be built by any consumer.
 go test ./...
 ```
 
+### B2C receipts (`racun`)
+
+The offline tests convert the examples in `racun/testdata/examples` and
+compare them with `racun/testdata/out` (`-update` writes them again; the
+ZKI uses the fixed test key `racun/testdata/test-key.pem`). Two tests are
+opt-in:
+
+- `-xsd` checks signed requests and the expected receipts against
+  `FiskalizacijaSchema.xsd` v1.10 with xmllint in Docker.
+- `-cistest` sends an accepted and a refused receipt, and each example, to
+  CIS test, and checks the answers. It writes nothing. It reads a FINA demo
+  certificate from the environment (keep it in `.certs/`, which git
+  ignores):
+
+```sh
+export CIS_TEST_CERT=$PWD/.certs/demo.p12
+read -rs CIS_TEST_PASSWORD && export CIS_TEST_PASSWORD
+go test ./racun/ -run 'TestCISTest' -cistest -count=1 -v
+unset CIS_TEST_PASSWORD
+```
+
+The offline tests also check CIS's real, signed answers in
+`racun/testdata/cistest/`. Only CIS can sign an answer, so these fixtures
+come from CIS test. To replace them, add `-record` to the command above,
+with `-run 'TestCISTest$'`. The test saves both answers and logs the new
+`acceptedJIR`, `acceptedMessageID` and `recordedAt`; update them in
+`racun/client_test.go` in the same commit.
+
 ### Examples
 
 `examples/` holds GOBL documents (an invoice, a credit note and a rejection),
@@ -223,6 +260,7 @@ service container, and the schema check.
 - [Tehnička specifikacija: Fiskalizacija eRačuna i eIzvještavanje v1.15](https://porezna.gov.hr/fiskalizacija/api/dokumenti/186) (CIS fiscalization and eReporting, including the rejection reason codes)
 - [HR UBL schematron of 13.03.2026](https://porezna.gov.hr/fiskalizacija/api/dokumenti/197) (rules 1.0.4)
 - [Aplikacijski odgovor v1.1](https://porezna.gov.hr/fiskalizacija/api/dokumenti/206) (application response)
+- Fiskalizacija računa u krajnjoj potrošnji, tehnička specifikacija v2.7, and `FiskalizacijaSchema.xsd` v1.10 (B2C receipts)
 
 ## License
 

@@ -1,0 +1,29 @@
+{
+	"$schema": "https://gobl.org/draft-0/bill/invoice",
+	"code": "1002",
+	"issue_date": "2026-11-06",
+	"issue_time": "14:05:00",
+	"currency": "EUR",
+	"supplier": {
+		"name": "Invopop d.o.o.",
+		"tax_id": { "country": "HR", "code": "80432461483" }
+	},
+	"lines": [
+		{
+			"quantity": "1",
+			"item": { "name": "Punjač", "price": "10.00" },
+			"taxes": [{ "cat": "VAT", "rate": "general" }]
+		},
+		{
+			"quantity": "1",
+			"item": { "name": "Tečaj prve pomoći", "price": "20.00" },
+			"taxes": [{ "cat": "VAT", "key": "exempt" }]
+		}
+	],
+	"payment": {
+		"advances": [
+			{ "key": "card", "description": "Kartica", "amount": "25.00" },
+			{ "key": "cash", "description": "Gotovina", "amount": "7.50" }
+		]
+	}
+}

@@ -2,3 +2,6 @@
 *.test
 .DS_Store
 dist/
+
+# FINA certificates for the opt-in CIS tests
+.certs/

@@ -1,0 +1,25 @@
+{
+	"$schema": "https://gobl.org/draft-0/bill/invoice",
+	"code": "1003",
+	"issue_date": "2026-11-06",
+	"issue_time": "09:30:00",
+	"currency": "EUR",
+	"supplier": {
+		"name": "Invopop d.o.o.",
+		"tax_id": { "country": "HR", "code": "80432461483" }
+	},
+	"customer": {
+		"name": "Kupac d.o.o.",
+		"tax_id": { "country": "HR", "code": "12345678903" }
+	},
+	"lines": [
+		{
+			"quantity": "4",
+			"item": { "name": "Knjiga", "price": "25.00" },
+			"taxes": [{ "cat": "VAT", "rate": "super-reduced" }]
+		}
+	],
+	"payment": {
+		"instructions": { "key": "card" }
+	}
+}

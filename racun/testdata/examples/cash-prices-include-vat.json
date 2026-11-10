@@ -1,0 +1,27 @@
+{
+	"$schema": "https://gobl.org/draft-0/bill/invoice",
+	"code": "1001",
+	"issue_date": "2026-11-06",
+	"issue_time": "13:58:10",
+	"currency": "EUR",
+	"tax": { "prices_include": "VAT" },
+	"supplier": {
+		"name": "Invopop d.o.o.",
+		"tax_id": { "country": "HR", "code": "80432461483" }
+	},
+	"lines": [
+		{
+			"quantity": "2",
+			"item": { "name": "Kava", "price": "2.50" },
+			"taxes": [{ "cat": "VAT", "rate": "general" }]
+		},
+		{
+			"quantity": "1",
+			"item": { "name": "Sendvič", "price": "5.65" },
+			"taxes": [{ "cat": "VAT", "rate": "reduced" }]
+		}
+	],
+	"payment": {
+		"advances": [{ "key": "cash", "description": "Gotovina", "amount": "10.65" }]
+	}
+}
