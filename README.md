@@ -134,6 +134,98 @@ Rules register under the `HR-ERACUN` namespace, guarded so they apply only when
 `hr-eracun-v1` is active. HR rules that GOBL cannot express stay with the
 Tax Administration's schematron, which the tests run (see below).
 
+## Invoice fiscalization request
+
+`racun` sends CIS an invoice request, `RacunZahtjev`, with the schema's
+Croatian element names. This is the request built from
+`racun/testdata/examples/cash-prices-include-vat.json`, before it is signed,
+with the meaning of each element. `racun/invoice.go` gives the Go name of
+each field.
+
+```xml
+<!-- RacunZahtjev: invoice request. Sign adds an XML-DSig <Signature> that
+     points at Id. -->
+<RacunZahtjev xmlns="http://www.apis-it.hr/fin/2012/types/f73" Id="RacunZahtjev">
+	<!-- Zaglavlje: message header -->
+	<Zaglavlje>
+		<!-- IdPoruke: message ID, a new UUID for each send -->
+		<IdPoruke>00000000-0000-4000-8000-000000000000</IdPoruke>
+		<!-- DatumVrijeme: when the message was sent -->
+		<DatumVrijeme>06.11.2026T13:58:10</DatumVrijeme>
+	</Zaglavlje>
+	<!-- Racun: the invoice (račun) -->
+	<Racun>
+		<!-- Oib: the issuer's OIB, from supplier.tax_id -->
+		<Oib>80432461483</Oib>
+		<!-- USustPdv (u sustavu PDV-a): the issuer is registered for VAT -->
+		<USustPdv>true</USustPdv>
+		<!-- DatVrijeme: issue date and time, from issue_date and issue_time -->
+		<DatVrijeme>06.11.2026T13:58:10</DatVrijeme>
+		<!-- OznSlijed: what the number counts within, P (premises) or N (device) -->
+		<OznSlijed>P</OznSlijed>
+		<!-- BrRac: invoice number, printed as 1001/POS1/1 -->
+		<BrRac>
+			<!-- BrOznRac: sequential number, from the invoice code -->
+			<BrOznRac>1001</BrOznRac>
+			<!-- OznPosPr: business premises label, registered with the Tax
+			     Administration -->
+			<OznPosPr>POS1</OznPosPr>
+			<!-- OznNapUr: device (till) label -->
+			<OznNapUr>1</OznNapUr>
+		</BrRac>
+		<!-- Pdv: VAT, one Porez for each rate -->
+		<Pdv>
+			<Porez>
+				<!-- Stopa: rate, in percent ("general" in GOBL) -->
+				<Stopa>25.00</Stopa>
+				<!-- Osnovica: taxable base. The prices include VAT, so
+				     2 × 2.50 = 5.00 is 4.00 base and 1.00 VAT. -->
+				<Osnovica>4.00</Osnovica>
+				<!-- Iznos: VAT amount -->
+				<Iznos>1.00</Iznos>
+			</Porez>
+			<Porez>
+				<!-- "reduced" in GOBL: 5.65 is 5.00 base and 0.65 VAT -->
+				<Stopa>13.00</Stopa>
+				<Osnovica>5.00</Osnovica>
+				<Iznos>0.65</Iznos>
+			</Porez>
+		</Pdv>
+		<!-- IznosUkupno: total, VAT included -->
+		<IznosUkupno>10.65</IznosUkupno>
+		<!-- NacinPlac (način plaćanja): payment method, see the table below -->
+		<NacinPlac>G</NacinPlac>
+		<!-- OibOper: the operator's OIB. Here the issuer's own OIB stands in. -->
+		<OibOper>80432461483</OibOper>
+		<!-- ZastKod (zaštitni kod): the ZKI, the MD5 of the RSA-SHA256 signature
+		     of Oib, DatVrijeme, the three BrRac parts and IznosUkupno -->
+		<ZastKod>29f16dcad4dc85441c183d3826c22985</ZastKod>
+		<!-- NakDost (naknadna dostava): late delivery, true for an invoice
+		     issued while CIS could not be reached and sent afterwards -->
+		<NakDost>false</NakDost>
+	</Racun>
+</RacunZahtjev>
+```
+
+| `NacinPlac` | Payment method |
+| --- | --- |
+| `G` | Cash (gotovina) |
+| `K` | Card (kartice) |
+| `T` | Bank transfer (transakcijski račun) |
+| `O` | Other, or more than one method |
+
+The schema also has elements this example leaves out: consumption tax
+(`Pnp`), other taxes (`OstaliPor`), the VAT-exempt amount (`IznosOslobPdv`),
+the margin-scheme amount (`IznosMarza`), the amount not subject to tax
+(`IznosNePodlOpor`), fees (`Naknade`), the number of an invoice from the
+bound paper invoice book, issued while the device was down (`ParagonBrRac`),
+a field the Tax Administration reserves (`SpecNamj`) and the buyer's OIB
+(`OibPrimateljaRacuna`), given only when the buyer is a business.
+
+CIS answers with `RacunOdgovor`. When it accepts the invoice, the answer holds
+the JIR (`Jir`, the unique invoice identifier); when it refuses it, the answer
+holds `Greske` (errors), each with a code and a message.
+
 ## Development
 
 ### Dependencies not yet released
