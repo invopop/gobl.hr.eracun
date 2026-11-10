@@ -21,7 +21,9 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
 	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/pay"
+	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -154,6 +156,42 @@ func TestExampleValues(t *testing.T) {
 	})
 }
 
+// withCharges is the cash-prices-include-vat example with document-level
+// charges and discounts added, calculated again.
+func withCharges(t *testing.T, charges []*bill.Charge, discounts []*bill.Discount) *bill.Invoice {
+	t.Helper()
+	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+	inv.Charges = charges
+	inv.Discounts = discounts
+	require.NoError(t, inv.Calculate())
+	return inv
+}
+
+func TestChargesAndDiscountsWithVAT(t *testing.T) {
+	key := testKey(t)
+	general := tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}
+	t.Run("a charge", func(t *testing.T) {
+		inv := withCharges(t, []*bill.Charge{{Amount: num.MakeAmount(100, 2), Reason: "Service", Taxes: general}}, nil)
+		r, err := FromInvoice(inv, testOptions(), key)
+		require.NoError(t, err)
+		assert.Equal(t, []*Tax{
+			{Rate: "25.00", Base: "4.80", Amount: "1.20"},
+			{Rate: "13.00", Base: fiveEuros, Amount: "0.65"},
+		}, r.VAT)
+		assert.Equal(t, "11.65", r.Total)
+	})
+	t.Run("a discount", func(t *testing.T) {
+		inv := withCharges(t, nil, []*bill.Discount{{Amount: num.MakeAmount(100, 2), Reason: "Promo", Taxes: general}})
+		r, err := FromInvoice(inv, testOptions(), key)
+		require.NoError(t, err)
+		assert.Equal(t, []*Tax{
+			{Rate: "25.00", Base: "3.20", Amount: "0.80"},
+			{Rate: "13.00", Base: fiveEuros, Amount: "0.65"},
+		}, r.VAT)
+		assert.Equal(t, "9.65", r.Total)
+	})
+}
+
 func TestZKIMatchesInvoice(t *testing.T) {
 	key := testKey(t)
 	r, err := NewInvoice(loadExample(t, "cash-prices-include-vat.json"), testOptions(), key)
@@ -225,6 +263,18 @@ func TestErrors(t *testing.T) {
 		})
 	}
 
+	t.Run("a charge without taxes", func(t *testing.T) {
+		inv := withCharges(t, []*bill.Charge{{Amount: num.MakeAmount(10, 2), Reason: "Povratna naknada"}}, nil)
+		_, err := FromInvoice(inv, testOptions(), key)
+		require.ErrorIs(t, err, ErrUnsupported)
+		assert.ErrorContains(t, err, "Povratna naknada")
+	})
+	t.Run("a discount without taxes", func(t *testing.T) {
+		inv := withCharges(t, nil, []*bill.Discount{{Amount: num.MakeAmount(10, 2), Reason: "Promo"}})
+		_, err := FromInvoice(inv, testOptions(), key)
+		require.ErrorIs(t, err, ErrUnsupported)
+		assert.ErrorContains(t, err, "Promo")
+	})
 	t.Run("not an invoice", func(t *testing.T) {
 		_, err := NewInvoice(nil, testOptions(), key)
 		assert.ErrorIs(t, err, ErrNotInvoice)

@@ -164,6 +164,19 @@ func checkInvoice(inv *bill.Invoice) error {
 	case inv.Totals.Payable.IsNegative():
 		return fmt.Errorf("negative total %w", ErrUnsupported)
 	}
+	// A charge or discount with VAT is in Totals.Taxes, so the VAT
+	// breakdown includes it. One without taxes changes the total but no
+	// breakdown, and is usually a fee (Naknade), which is not supported.
+	for _, c := range inv.Charges {
+		if len(c.Taxes) == 0 {
+			return fmt.Errorf("charge %q without taxes %w: fees (Naknade) are not supported", c.Reason, ErrUnsupported)
+		}
+	}
+	for _, d := range inv.Discounts {
+		if len(d.Taxes) == 0 {
+			return fmt.Errorf("discount %q without taxes %w", d.Reason, ErrUnsupported)
+		}
+	}
 	return nil
 }
 
