@@ -42,14 +42,14 @@ func (c *Client) readInvoiceAnswer(status int, data []byte) (*InvoiceResponse, e
 		if status != 200 {
 			return nil, ErrConnection.WithRequestWritten(true).WithCode(strconv.Itoa(status)).WithMessage(snippet(data))
 		}
-		return nil, ErrConnection.WithRequestWritten(true).WithMessage(err.Error())
+		return nil, ErrProtocol.WithRequestWritten(true).WithMessage(err.Error())
 	}
 
 	switch {
 	case msg.NamespaceURI() == NamespaceSOAP && msg.Tag == "Fault":
 		return nil, faultError(msg)
 	case msg.NamespaceURI() != NamespaceF73 || msg.Tag != "RacunOdgovor":
-		return nil, ErrConnection.WithRequestWritten(true).WithCode(strconv.Itoa(status)).
+		return nil, ErrProtocol.WithRequestWritten(true).WithCode(strconv.Itoa(status)).
 			WithMessage(fmt.Sprintf("unexpected answer message %s", msg.Tag))
 	}
 
@@ -63,18 +63,18 @@ func (c *Client) readInvoiceAnswer(status int, data []byte) (*InvoiceResponse, e
 	doc.SetRoot(signed)
 	out, err := doc.WriteToBytes()
 	if err != nil {
-		return nil, ErrConnection.WithRequestWritten(true).WithMessage("writing the signed answer: " + err.Error())
+		return nil, ErrProtocol.WithRequestWritten(true).WithMessage("writing the signed answer: " + err.Error())
 	}
 	res := new(InvoiceResponse)
 	if err := xml.Unmarshal(out, res); err != nil {
-		return nil, ErrConnection.WithRequestWritten(true).WithMessage("reading the answer: " + err.Error()).WithCause(err)
+		return nil, ErrProtocol.WithRequestWritten(true).WithMessage("reading the answer: " + err.Error()).WithCause(err)
 	}
 
 	switch {
 	case len(res.Errors) > 0:
 		return res, refusal(res.Errors)
 	case res.JIR == "":
-		return nil, ErrConnection.WithRequestWritten(true).WithMessage("the answer has neither a JIR nor errors")
+		return nil, ErrProtocol.WithRequestWritten(true).WithMessage("the answer has neither a JIR nor errors")
 	}
 	return res, nil
 }

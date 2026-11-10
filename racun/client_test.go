@@ -2,10 +2,14 @@ package racun
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/beevik/etree"
+	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -168,19 +174,19 @@ func TestReadAnswer(t *testing.T) {
 			name:   "empty body",
 			status: 200,
 			data:   envelope(``),
-			err:    ErrConnection, written: true, msg: "0 messages",
+			err:    ErrProtocol, written: true, msg: "0 messages",
 		},
 		{
 			name:   "two messages",
 			status: 200,
 			data:   envelope(`<a/><b/>`),
-			err:    ErrConnection, written: true, msg: "2 messages",
+			err:    ErrProtocol, written: true, msg: "2 messages",
 		},
 		{
 			name:   "another message",
 			status: 200,
 			data:   envelope(`<EchoResponse xmlns="` + NamespaceF73 + `">hi</EchoResponse>`),
-			err:    ErrConnection, code: "200", written: true, msg: "unexpected answer message EchoResponse",
+			err:    ErrProtocol, code: "200", written: true, msg: "unexpected answer message EchoResponse",
 		},
 	}
 	for _, tt := range tests {
@@ -194,6 +200,86 @@ func TestReadAnswer(t *testing.T) {
 			assert.Contains(t, e.Message(), tt.msg)
 		})
 	}
+}
+
+// signingCIS is a stand-in for CIS that signs answers the real CIS would
+// never send. It returns a sandbox client that trusts only its certificate,
+// and a function that signs an answer message and puts it in a SOAP
+// envelope.
+func signingCIS(t *testing.T) (*Client, func(msg string) []byte) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: answerSigners[EnvironmentSandbox]},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+
+	c := recordedClient(t)
+	c.roots = x509.NewCertPool()
+	c.roots.AddCert(cert)
+	c.now = time.Now
+
+	sign := func(msg string) []byte {
+		t.Helper()
+		doc := etree.NewDocument()
+		require.NoError(t, doc.ReadFromString(msg))
+		ctx, err := dsig.NewSigningContext(key, [][]byte{der})
+		require.NoError(t, err)
+		ctx.IdAttribute = "Id"
+		ctx.Canonicalizer = dsig.MakeC14N10ExclusiveCanonicalizerWithPrefixList("")
+		require.NoError(t, ctx.SetSignatureMethod(dsig.RSASHA256SignatureMethod))
+		signed, err := ctx.SignEnveloped(doc.Root())
+		require.NoError(t, err)
+		out := etree.NewDocument()
+		out.SetRoot(signed)
+		data, err := out.WriteToBytes()
+		require.NoError(t, err)
+		return envelop(data)
+	}
+	return c, sign
+}
+
+// answer is a RacunOdgovor with the given content, ready for signingCIS.
+func answer(content string) string {
+	return `<RacunOdgovor xmlns="` + NamespaceF73 + `" Id="RacunOdgovor">` + content + `</RacunOdgovor>`
+}
+
+const answerHeader = `<Zaglavlje><IdPoruke>9c608e11-1b97-4425-a89d-3ad4bcbba2e9</IdPoruke>` +
+	`<DatumVrijeme>10.11.2026T16:18:23</DatumVrijeme></Zaglavlje>`
+
+func TestAnswerBreaksSpecification(t *testing.T) {
+	c, sign := signingCIS(t)
+	protocolErr := func(t *testing.T, status int, data []byte, msg string) {
+		t.Helper()
+		_, err := c.readInvoiceAnswer(status, data)
+		require.ErrorIs(t, err, ErrProtocol)
+		var e *Error
+		require.True(t, errors.As(err, &e))
+		assert.True(t, e.RequestWritten())
+		assert.ErrorContains(t, err, msg)
+	}
+
+	t.Run("the stand-in's valid answer is accepted", func(t *testing.T) {
+		res, err := c.readInvoiceAnswer(200, sign(answer(answerHeader+`<Jir>00000000-c7a1-407f-a1b3-14118c9d1b83</Jir>`)))
+		require.NoError(t, err)
+		assert.Equal(t, "00000000-c7a1-407f-a1b3-14118c9d1b83", res.JIR)
+	})
+	t.Run("HTTP 200 that is not SOAP", func(t *testing.T) {
+		protocolErr(t, 200, []byte("<html>maintenance</html>"), "not a SOAP envelope")
+	})
+	t.Run("neither a JIR nor errors", func(t *testing.T) {
+		protocolErr(t, 200, sign(answer(answerHeader)), "neither a JIR nor errors")
+	})
 }
 
 func TestSendInvoice(t *testing.T) {

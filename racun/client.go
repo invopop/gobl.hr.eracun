@@ -150,7 +150,7 @@ func (c *Client) SignInvoice(req *InvoiceRequest) ([]byte, error) {
 // SendInvoice posts an envelope from SignInvoice to CIS and returns its
 // answer, after checking the answer's signature. A refusal returns the
 // answer, with all its errors, and an ErrCIS. Other errors are ErrServer,
-// ErrSignature and ErrConnection, with no answer. It does not retry, and it
+// ErrSignature, ErrProtocol and ErrConnection, with no answer. It does not retry, and it
 // does not follow a redirect.
 //
 // The answer's MessageID should match the request's; Fiscalize checks it.

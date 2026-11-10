@@ -6,9 +6,15 @@ import (
 )
 
 // Errors a call to CIS can end with. A refusal is told apart from a server
-// fault, from an answer that can't be trusted, and from a call that got no
-// readable answer. All but a refusal say whether the request reached CIS,
-// the only case where CIS may have recorded it.
+// fault, from an answer that can't be trusted, from an answer that breaks
+// the specification, and from a call that got no answer. All but a refusal
+// say whether the request reached CIS, the only case where CIS may have
+// recorded it.
+//
+// ErrConnection and ErrServer are expected now and then: retry later.
+// ErrProtocol and ErrSignature mean that CIS, or something between CIS and
+// the client, broke what the specification promises. Retrying is still
+// right, but they are not expected, and a person should look at them.
 //
 // An invoice is issued to the customer whatever the call ends with; without
 // a JIR it is sent again later with LateDelivery set.
@@ -21,12 +27,19 @@ var (
 	// Server or Server.*). CIS got the request, and a fault does not prove
 	// it recorded nothing, so RequestWritten is true.
 	ErrServer = newError("server")
-	// ErrConnection is a call that got no readable answer: the connection
-	// failed, timed out or dropped, CIS answered with a redirect, or with
-	// an HTTP error and no answer message, or the answer can't be read.
-	// When RequestWritten is false nothing reached CIS. When it is true
-	// CIS may have recorded the invoice.
+	// ErrConnection is a call that got no answer from CIS: the connection
+	// failed, timed out or dropped, the answer was too large, CIS answered
+	// with a redirect, or with an HTTP error and no SOAP message, such as a
+	// proxy's error page. When RequestWritten is false nothing reached
+	// CIS. When it is true CIS may have recorded the invoice.
 	ErrConnection = newError("connection")
+	// ErrProtocol is an answer that breaks the specification: HTTP 200
+	// with no readable SOAP message, a message other than RacunOdgovor, or
+	// a RacunOdgovor that can't be read or holds neither a JIR nor errors.
+	// It is not a network problem and not the request's fault, so it is
+	// kept apart from ErrConnection for callers to alert on. CIS answered,
+	// so RequestWritten is true and CIS may have recorded the invoice.
+	ErrProtocol = newError("protocol")
 	// ErrSignature is an answer whose signature does not verify, is
 	// missing, or comes from a certificate other than the CIS one that the
 	// CA bundle trusts (fiskalcis, or fiskalcistest in sandbox). CIS
