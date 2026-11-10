@@ -35,8 +35,9 @@ potrošnji"), with the Tax Administration's invoice fiscalization service, in
 as in eRačun; it has no separate term for a receipt.
 
 The Croatian tax regime itself (`regimes/hr`) lives in GOBL core. This module
-only carries the eRačun addon and format, so that only projects handling
-Croatian eRačuni take on their weight.
+carries only what Croatian fiscalization adds on top: the eRačun addon and
+format, and the `racun` client, so that only projects handling Croatian
+invoices take on their weight.
 
 ## Layout
 
