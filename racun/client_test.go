@@ -18,16 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The answers -cistest recorded on 2026-11-06, signed by fiskalcistest.
-const (
-	acceptedJIR       = "fdd9fc9a-c7a1-407f-a1b3-14118c9d1b83"
-	acceptedMessageID = "07474d19-f658-4cc4-af06-c308ab67c400"
-)
-
-// recordedAt is when the answers were recorded: the time their
-// certificate is checked at.
-var recordedAt = time.Date(2026, 11, 6, 12, 37, 0, 0, time.UTC)
-
 func readTestdata(t *testing.T, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(name)
@@ -36,7 +26,7 @@ func readTestdata(t *testing.T, name string) []byte {
 }
 
 // recordedClient is a sandbox client that trusts the FINA CA bundle and
-// checks certificates at recordedAt.
+// checks certificates when the accepted cassette was recorded.
 func recordedClient(t *testing.T) *Client {
 	t.Helper()
 	c, err := New(&Config{
@@ -45,7 +35,8 @@ func recordedClient(t *testing.T) *Client {
 		CABundle:    readTestdata(t, finaCABundle),
 	})
 	require.NoError(t, err)
-	c.now = func() time.Time { return recordedAt }
+	sentAt := acceptedCassette(t).SentAt
+	c.now = func() time.Time { return sentAt }
 	return c
 }
 
@@ -81,8 +72,8 @@ func TestReadRecordedAnswers(t *testing.T) {
 	t.Run("accepted", func(t *testing.T) {
 		res, err := recordedClient(t).readReceiptAnswer(200, readTestdata(t, "testdata/cistest/accepted-answer.xml"))
 		require.NoError(t, err)
-		assert.Equal(t, acceptedJIR, res.JIR)
-		assert.Equal(t, acceptedMessageID, res.Header.MessageID)
+		assert.Equal(t, acceptedCassette(t).JIR, res.JIR)
+		assert.Equal(t, acceptedCassette(t).MessageID, res.Header.MessageID)
 		assert.Empty(t, res.Errors)
 	})
 	t.Run("refused", func(t *testing.T) {
@@ -111,7 +102,7 @@ func TestAnswerSignature(t *testing.T) {
 	}
 
 	t.Run("a changed JIR", func(t *testing.T) {
-		answer := strings.Replace(accepted, acceptedJIR, "00000000-c7a1-407f-a1b3-14118c9d1b83", 1)
+		answer := strings.Replace(accepted, acceptedCassette(t).JIR, "00000000-c7a1-407f-a1b3-14118c9d1b83", 1)
 		signatureErr(t, recordedClient(t), answer, "")
 	})
 	t.Run("no signature", func(t *testing.T) {
@@ -221,7 +212,7 @@ func TestSendReceipt(t *testing.T) {
 		require.NoError(t, err)
 		res, err := c.SendReceipt(context.Background(), envelope)
 		require.NoError(t, err)
-		assert.Equal(t, acceptedJIR, res.JIR)
+		assert.Equal(t, acceptedCassette(t).JIR, res.JIR)
 		assert.Equal(t, http.MethodPost, got.Method)
 		assert.Equal(t, "text/xml; charset=utf-8", got.Header.Get("Content-Type"))
 		assert.Equal(t, soapActionReceipt, got.Header.Get("SOAPAction"))
@@ -234,7 +225,7 @@ func TestSendReceipt(t *testing.T) {
 		})
 		res, err := c.Fiscalize(context.Background(), testRequest())
 		require.ErrorIs(t, err, ErrSignature)
-		assert.ErrorContains(t, err, "the answer is for message "+acceptedMessageID)
+		assert.ErrorContains(t, err, "the answer is for message "+acceptedCassette(t).MessageID)
 		assert.NotNil(t, res)
 	})
 
@@ -243,10 +234,10 @@ func TestSendReceipt(t *testing.T) {
 			w.Write(accepted) //nolint:errcheck
 		})
 		req := testRequest()
-		req.Header.MessageID = acceptedMessageID
+		req.Header.MessageID = acceptedCassette(t).MessageID
 		res, err := c.Fiscalize(context.Background(), req)
 		require.NoError(t, err)
-		assert.Equal(t, acceptedJIR, res.JIR)
+		assert.Equal(t, acceptedCassette(t).JIR, res.JIR)
 	})
 
 	t.Run("does not follow a redirect", func(t *testing.T) {
@@ -298,7 +289,7 @@ func TestSendReceipt(t *testing.T) {
 
 // serverClient starts a TLS server with handler and returns a sandbox
 // client that calls it, trusting its certificate and the FINA CA bundle,
-// with certificates checked at recordedAt.
+// with certificates checked when the accepted cassette was recorded.
 func serverClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewTLSServer(handler)
@@ -311,7 +302,8 @@ func serverClient(t *testing.T, handler http.HandlerFunc) *Client {
 		CABundle:    bundle,
 	}, srv.URL)
 	require.NoError(t, err)
-	c.now = func() time.Time { return recordedAt }
+	sentAt := acceptedCassette(t).SentAt
+	c.now = func() time.Time { return sentAt }
 	return c
 }
 

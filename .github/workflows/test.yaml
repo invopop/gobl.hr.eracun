@@ -61,6 +61,11 @@ jobs:
       - name: ApplicationResponse schema
         run: go test ./ubl/ -run TestApplicationResponse -xsd
 
+      # The receipt requests and the expected receipts against
+      # FiskalizacijaSchema.xsd, with xmllint run in a container.
+      - name: Receipt schema
+        run: go test ./racun/ -xsd
+
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
 

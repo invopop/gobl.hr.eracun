@@ -162,31 +162,29 @@ go test ./...
 
 ### B2C receipts (`racun`)
 
-The offline tests convert the examples in `racun/testdata/examples` and
-compare them with `racun/testdata/out` (`-update` writes them again; the
-ZKI uses the fixed test key `racun/testdata/test-key.pem`). Two tests are
-opt-in:
+The tests convert the examples in `racun/testdata/examples` and compare them
+with `racun/testdata/out` (`-update` writes them again; the ZKI uses the
+fixed test key `racun/testdata/test-key.pem`).
 
-- `-xsd` checks signed requests and the expected receipts against
-  `FiskalizacijaSchema.xsd` v1.10 with xmllint in Docker.
-- `-cistest` sends an accepted and a refused receipt, and each example, to
-  CIS test, and checks the answers. It writes nothing. It reads a FINA demo
-  certificate from the environment (keep it in `.certs/`, which git
-  ignores):
+Every call to CIS is replayed from a cassette in `racun/testdata/cistest/`:
+CIS test's real, signed answer (`<name>-answer.xml`) and what the replay
+needs (`<name>.json`: the message ID, when it was sent, the HTTP status and
+the JIR or error code). A normal run fiscalizes each scenario (an accepted
+receipt, a refused one and each example) through the whole client, offline:
+it rebuilds the request for the recorded time and message ID, and checks
+CIS's signature on the recorded answer. Only CIS can sign an answer, so the
+cassettes come from CIS test. To record them again, run with `-record` and
+a FINA demo certificate (keep it in `.certs/`, which git ignores):
 
 ```sh
 export CIS_TEST_CERT=$PWD/.certs/demo.p12
 read -rs CIS_TEST_PASSWORD && export CIS_TEST_PASSWORD
-go test ./racun/ -run 'TestCISTest' -cistest -count=1 -v
+go test ./racun/ -run 'TestCISTest' -record -count=1 -v
 unset CIS_TEST_PASSWORD
 ```
 
-The offline tests also check CIS's real, signed answers in
-`racun/testdata/cistest/`. Only CIS can sign an answer, so these fixtures
-come from CIS test. To replace them, add `-record` to the command above,
-with `-run 'TestCISTest$'`. The test saves both answers and logs the new
-`acceptedJIR`, `acceptedMessageID` and `recordedAt`; update them in
-`racun/client_test.go` in the same commit.
+`-xsd` checks signed requests and the expected receipts against
+`FiskalizacijaSchema.xsd` v1.10 with xmllint in Docker. CI runs it.
 
 ### Examples
 
