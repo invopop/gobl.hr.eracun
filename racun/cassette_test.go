@@ -53,9 +53,9 @@ type cassette struct {
 	SentAt time.Time `json:"sent_at"`
 	// Status is the HTTP status CIS answered with.
 	Status int `json:"status"`
-	// JIR is the receipt's JIR when CIS accepted it.
+	// JIR is the invoice's JIR when CIS accepted it.
 	JIR string `json:"jir,omitempty"`
-	// ErrorCode is CIS's error code when it refused the receipt.
+	// ErrorCode is CIS's error code when it refused the invoice.
 	ErrorCode string `json:"error_code,omitempty"`
 }
 
@@ -88,7 +88,7 @@ func acceptedCassette(t *testing.T) *cassette {
 
 // buildRequest builds a scenario's request for the time it is sent at and
 // its message ID, signing the ZKI with cert's key.
-type buildRequest func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *ReceiptRequest
+type buildRequest func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *InvoiceRequest
 
 // fiscalizeCassette fiscalizes a scenario's request through the whole
 // client and checks the outcome. It replays the cassette, or with -record
@@ -103,7 +103,7 @@ func fiscalizeCassette(t *testing.T, name string, wantAccepted bool, build build
 	client := recordedClient(t)
 	client.now = func() time.Time { return c.SentAt }
 	client.conn.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		if r.Method != http.MethodPost || r.URL.String() != client.URL() || r.Header.Get("SOAPAction") != soapActionReceipt {
+		if r.Method != http.MethodPost || r.URL.String() != client.URL() || r.Header.Get("SOAPAction") != soapActionInvoice {
 			return nil, fmt.Errorf("no cassette for %s %s (SOAPAction %q)", r.Method, r.URL, r.Header.Get("SOAPAction"))
 		}
 		return &http.Response{

@@ -27,10 +27,10 @@ func envelop(signed []byte) []byte {
 	return []byte(b.String())
 }
 
-// readReceiptAnswer reads an HTTP answer to a receipt request. CIS answers a
+// readInvoiceAnswer reads an HTTP answer to an invoice request. CIS answers a
 // refusal with HTTP 500 and a signed RacunOdgovor, not a SOAP fault, so the
 // message in the body decides, not the status.
-func (c *Client) readReceiptAnswer(status int, data []byte) (*ReceiptResponse, error) {
+func (c *Client) readInvoiceAnswer(status int, data []byte) (*InvoiceResponse, error) {
 	if status >= 300 && status < 400 {
 		// The client follows no redirect, so the request stopped here.
 		// Where it pointed is left out of the message.
@@ -65,7 +65,7 @@ func (c *Client) readReceiptAnswer(status int, data []byte) (*ReceiptResponse, e
 	if err != nil {
 		return nil, ErrConnection.WithRequestWritten(true).WithMessage("writing the signed answer: " + err.Error())
 	}
-	res := new(ReceiptResponse)
+	res := new(InvoiceResponse)
 	if err := xml.Unmarshal(out, res); err != nil {
 		return nil, ErrConnection.WithRequestWritten(true).WithMessage("reading the answer: " + err.Error()).WithCause(err)
 	}

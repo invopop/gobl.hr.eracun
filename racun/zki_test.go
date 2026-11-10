@@ -41,7 +41,7 @@ func TestZKI(t *testing.T) {
 		assert.Equal(t, hex.EncodeToString(sum[:]), zki)
 	})
 
-	t.Run("is the same every time for the same receipt", func(t *testing.T) {
+	t.Run("is the same every time for the same invoice", func(t *testing.T) {
 		a, err := ZKI(cert.Key, testZKIInput())
 		require.NoError(t, err)
 		b, err := ZKI(cert.Key, testZKIInput())
@@ -49,7 +49,7 @@ func TestZKI(t *testing.T) {
 		assert.Equal(t, a, b)
 	})
 
-	t.Run("changes with the receipt data", func(t *testing.T) {
+	t.Run("changes with the invoice data", func(t *testing.T) {
 		a, err := ZKI(cert.Key, testZKIInput())
 		require.NoError(t, err)
 		in := testZKIInput()
@@ -73,6 +73,6 @@ func TestZKI(t *testing.T) {
 		in := testZKIInput()
 		in.Number = nil
 		_, err = ZKI(cert.Key, in)
-		assert.EqualError(t, err, "no receipt number")
+		assert.EqualError(t, err, "no invoice number")
 	})
 }

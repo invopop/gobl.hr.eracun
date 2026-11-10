@@ -1,9 +1,16 @@
-// Package racun fiscalizes Croatian B2C receipts with the Tax
-// Administration's receipt service (Fiscalization 1.0, "fiskalizacija u
-// krajnjoj potrošnji").
+// Package racun fiscalizes Croatian invoices (računi) with the Tax
+// Administration's invoice fiscalization service (Fiscalization 1.0,
+// "fiskalizacija računa u krajnjoj potrošnji": fiscalization of invoices in
+// final consumption, Fiscalization Act, NN 89/25, Art. 2(12)).
 //
-// NewReceipt and FromInvoice build the receipt (Racun) from a GOBL invoice
-// and compute its ZKI. Sign signs a request, and a Client sends it to CIS
+// Croatian law calls the document a shop prints a račun, an invoice; it has
+// no separate term for a receipt. Invoice here is the račun as CIS receives
+// it: its elements (Art. 2(7)) in the schema's Racun element. It is not an
+// eRačun (e-invoice, Art. 2(8)), which is a structured document sent to the
+// buyer.
+//
+// NewInvoice and FromInvoice build the Invoice from a GOBL bill.Invoice and
+// compute its ZKI. Sign signs a request, and a Client sends it to CIS
 // and checks CIS's signed answer.
 //
 // The messages follow FiskalizacijaSchema.xsd v1.10 (kept in
@@ -12,12 +19,12 @@
 // order; Go names are English. Amounts, dates and times are strings,
 // written exactly as the schema's patterns ask.
 //
-// This is a different service from the fiscalization of B2B eRačuni
+// This is a different service from the fiscalization of eRačuni
 // (Fiscalization 2.0): another namespace, port and signature (plain
 // XML-DSig, not XAdES).
 package racun
 
-// Namespaces of the receipt messages.
+// Namespaces of the invoice messages.
 const (
 	NamespaceF73  = "http://www.apis-it.hr/fin/2012/types/f73"
 	NamespaceDSig = "http://www.w3.org/2000/09/xmldsig#"
@@ -31,18 +38,18 @@ const DateTimeFormat = "02.01.2006T15:04:05"
 // a space where DateTimeFormat has a T (§12).
 const zkiDateTimeFormat = "02.01.2006 15:04:05"
 
-// SequenceScope says what a receipt number counts within (OznSlijed).
+// SequenceScope says what an invoice number counts within (OznSlijed).
 type SequenceScope string
 
 // Sequence scopes.
 const (
-	// SequencePremises numbers receipts per business premises.
+	// SequencePremises numbers invoices per business premises.
 	SequencePremises SequenceScope = "P"
-	// SequenceDevice numbers receipts per device.
+	// SequenceDevice numbers invoices per device.
 	SequenceDevice SequenceScope = "N"
 )
 
-// PaymentMethod is how a receipt was paid (NacinPlac).
+// PaymentMethod is how an invoice was paid (NacinPlac).
 type PaymentMethod string
 
 // Payment methods.
@@ -50,6 +57,6 @@ const (
 	PaymentCash     PaymentMethod = "G"
 	PaymentCard     PaymentMethod = "K"
 	PaymentTransfer PaymentMethod = "T"
-	// PaymentOther also covers receipts paid in more than one way.
+	// PaymentOther also covers invoices paid in more than one way.
 	PaymentOther PaymentMethod = "O"
 )

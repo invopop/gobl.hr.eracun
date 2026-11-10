@@ -10,7 +10,7 @@ import (
 // readable answer. All but a refusal say whether the request reached CIS,
 // the only case where CIS may have recorded it.
 //
-// A receipt is issued to the customer whatever the call ends with; without
+// An invoice is issued to the customer whatever the call ends with; without
 // a JIR it is sent again later with LateDelivery set.
 var (
 	// ErrCIS is a refusal: a signed answer with errors, whose Code is the
@@ -25,13 +25,13 @@ var (
 	// failed, timed out or dropped, CIS answered with a redirect, or with
 	// an HTTP error and no answer message, or the answer can't be read.
 	// When RequestWritten is false nothing reached CIS. When it is true
-	// CIS may have recorded the receipt.
+	// CIS may have recorded the invoice.
 	ErrConnection = newError("connection")
 	// ErrSignature is an answer whose signature does not verify, is
 	// missing, or comes from a certificate other than the CIS one that the
 	// CA bundle trusts (fiskalcis, or fiskalcistest in sandbox). CIS
 	// answered, so RequestWritten is true, but nothing in the answer can be
-	// relied on, including whether CIS recorded the receipt.
+	// relied on, including whether CIS recorded the invoice.
 	ErrSignature = newError("signature")
 )
 

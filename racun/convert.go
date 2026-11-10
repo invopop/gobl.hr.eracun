@@ -1,10 +1,10 @@
-// Converting a GOBL invoice into the receipt CIS fiscalizes (Racun).
+// Converting a GOBL invoice into the Invoice CIS fiscalizes (Racun).
 //
-// Most of the receipt comes from the invoice: the issuer's OIB, the issue
+// Most of the Invoice comes from the GOBL invoice: the issuer's OIB, the issue
 // date and time, the sequential number, the VAT breakdown, the total, the
 // payment method and the buyer's OIB. The values a GOBL invoice can't carry
 // yet come from Options: the business premises and device labels, the
-// operator's OIB, the numbering scope, and whether the receipt is sent late.
+// operator's OIB, the numbering scope, and whether the Invoice is sent late.
 // A B2C addon is meant to carry them as extensions.
 
 package racun
@@ -31,21 +31,21 @@ import (
 var (
 	// ErrNotInvoice is an envelope that holds no invoice.
 	ErrNotInvoice = errors.New("envelope does not hold an invoice")
-	// ErrMissing is an invoice or options without a field the receipt
+	// ErrMissing is an invoice or options without a field fiscalization
 	// requires.
-	ErrMissing = errors.New("missing a field the receipt requires")
-	// ErrInvalid is a field whose value the receipt can't take.
-	ErrInvalid = errors.New("has a value the receipt can't take")
+	ErrMissing = errors.New("missing a field fiscalization requires")
+	// ErrInvalid is a field whose value fiscalization can't take.
+	ErrInvalid = errors.New("has a value fiscalization can't take")
 	// ErrUnsupported is an invoice the conversion does not handle yet.
-	ErrUnsupported = errors.New("not supported for receipts yet")
+	ErrUnsupported = errors.New("not supported for fiscalization yet")
 )
 
 // location is Croatian local time. GOBL dates and times are local to the
-// regime, and receipts are written in Croatian local time with no offset.
+// regime, and the Invoice is written in Croatian local time with no offset.
 var location = mustLocation("Europe/Zagreb")
 
 var (
-	// sequentialPattern is a receipt number: digits with no leading zero
+	// sequentialPattern is an invoice number: digits with no leading zero
 	// (BrOznRac).
 	sequentialPattern = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
 	// premisesPattern is a business premises label (OznPosPr).
@@ -56,15 +56,15 @@ var (
 	oibPattern = regexp.MustCompile(`^[0-9]{11}$`)
 )
 
-// Options are the receipt values a GOBL invoice doesn't carry yet.
+// Options are the Invoice values a GOBL invoice doesn't carry yet.
 type Options struct {
 	// Premises is the business premises label registered in ePorezna
 	// (OznPosPr): letters and digits.
 	Premises string
-	// Device is the label of the till that issued the receipt (OznNapUr):
+	// Device is the label of the till that issued the invoice (OznNapUr):
 	// digits.
 	Device string
-	// SequenceScope says whether receipt numbers count per premises or per
+	// SequenceScope says whether invoice numbers count per premises or per
 	// device. The default is per premises.
 	SequenceScope SequenceScope
 	// OperatorOIB is the OIB of the person at the till, or the issuer's OIB
@@ -72,18 +72,18 @@ type Options struct {
 	OperatorOIB string
 	// NotInVATSystem is true for an issuer outside the VAT system.
 	NotInVATSystem bool
-	// LateDelivery is true when the receipt was issued without a JIR and
+	// LateDelivery is true when the invoice was issued without a JIR and
 	// is sent again (NakDost).
 	LateDelivery bool
-	// HandwrittenNumber is the number of a paper receipt entered after the
-	// till broke down (ParagonBrRac).
+	// HandwrittenNumber is the number of an invoice from the bound paper
+	// invoice book, entered after the till broke down (ParagonBrRac).
 	HandwrittenNumber string
 }
 
-// NewReceipt builds the receipt of the invoice in the envelope, with its ZKI
+// NewInvoice builds the Invoice of the GOBL invoice in the envelope, with its ZKI
 // computed with key, the issuer's private key. The envelope must be
 // calculated.
-func NewReceipt(env *gobl.Envelope, opts *Options, key crypto.Signer) (*Receipt, error) {
+func NewInvoice(env *gobl.Envelope, opts *Options, key crypto.Signer) (*Invoice, error) {
 	if env == nil {
 		return nil, ErrNotInvoice
 	}
@@ -94,14 +94,14 @@ func NewReceipt(env *gobl.Envelope, opts *Options, key crypto.Signer) (*Receipt,
 	return FromInvoice(inv, opts, key)
 }
 
-// FromInvoice builds the receipt of a calculated invoice, with its ZKI
+// FromInvoice builds the Invoice of a calculated GOBL invoice, with its ZKI
 // computed with key, the issuer's private key. The ZKI goes on the printed
-// receipt and does not change when the receipt is sent again.
-func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Receipt, error) {
+// invoice and does not change when the Invoice is sent again.
+func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice, error) {
 	if opts == nil {
 		opts = new(Options)
 	}
-	r := new(Receipt)
+	r := new(Invoice)
 	if err := checkInvoice(inv); err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func checkInvoice(inv *bill.Invoice) error {
 	case inv.Type != bill.InvoiceTypeStandard:
 		return fmt.Errorf("invoice type %q %w", inv.Type, ErrUnsupported)
 	case inv.Currency != currency.EUR:
-		return fmt.Errorf("currency %q %w: receipts are in euros", inv.Currency, ErrInvalid)
+		return fmt.Errorf("currency %q %w: fiscalized invoices are in euros", inv.Currency, ErrInvalid)
 	case inv.Totals.Payable.IsNegative():
 		return fmt.Errorf("negative total %w", ErrUnsupported)
 	}
@@ -188,7 +188,7 @@ func oib(field, code string) (string, error) {
 }
 
 // issueTime is the issue date and time of the invoice in Croatian local
-// time. Receipts need the time, so it must be set.
+// time. Fiscalization needs the time, so it must be set.
 func issueTime(inv *bill.Invoice) (time.Time, error) {
 	if inv.IssueTime == nil || inv.IssueTime.IsZero() {
 		return time.Time{}, fmt.Errorf("issue time %w", ErrMissing)
@@ -197,7 +197,7 @@ func issueTime(inv *bill.Invoice) (time.Time, error) {
 	return time.Date(d.Year, d.Month, d.Day, t.Hour, t.Minute, t.Second, 0, location), nil
 }
 
-// number is the receipt number: the invoice code, which must be the bare
+// number is the invoice number: the GOBL invoice code, which must be the bare
 // sequential number, and the premises and device labels from opts.
 func number(inv *bill.Invoice, opts *Options) (*Number, error) {
 	code := inv.Code.String()
@@ -220,7 +220,7 @@ func number(inv *bill.Invoice, opts *Options) (*Number, error) {
 
 // addTaxes adds the VAT breakdown: one entry per rate with a percentage, and
 // the exempt and outside-scope bases as totals.
-func addTaxes(r *Receipt, inv *bill.Invoice) error {
+func addTaxes(r *Invoice, inv *bill.Invoice) error {
 	if inv.Totals.Taxes == nil {
 		return nil
 	}
@@ -271,7 +271,7 @@ func percent(p num.Percentage) string {
 	return p.Amount().Rescale(2).String()
 }
 
-// paymentMethod maps how the invoice was paid to NacinPlac. A receipt paid
+// paymentMethod maps how the invoice was paid to NacinPlac. An invoice paid
 // at the till records its payment as advances; an invoice without them
 // falls back to the payment instructions. Several methods, or one without
 // a code of its own, are O (other), as the schema says.
@@ -309,7 +309,7 @@ func meansMethod(k cbc.Key) PaymentMethod {
 	return PaymentOther
 }
 
-// buyerOIB is the customer's OIB, for a receipt to a Croatian business.
+// buyerOIB is the customer's OIB, for an invoice to a Croatian business.
 func buyerOIB(inv *bill.Invoice) string {
 	c := inv.Customer
 	if c == nil || c.TaxID == nil || c.TaxID.Country != l10n.HR.Tax() {

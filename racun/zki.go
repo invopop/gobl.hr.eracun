@@ -11,31 +11,31 @@ import (
 	"time"
 )
 
-// ZKIInput is the receipt data the ZKI protects.
+// ZKIInput is the invoice data the ZKI protects.
 type ZKIInput struct {
 	IssuerOIB string
 	// IssuedAt is the issue time in Croatian local time, as printed on the
-	// receipt.
+	// invoice.
 	IssuedAt time.Time
 	Number   *Number
-	// Total is the receipt total as written in the request, such as
+	// Total is the invoice total as written in the request, such as
 	// "1245.56".
 	Total string
 }
 
 // ZKI computes the issuer's protection code (zaštitni kod izdavatelja,
 // §12): the MD5 of the RSA-SHA256 signature of the issuer OIB, the issue
-// time, the receipt number, premises and device, and the total, joined with
+// time, the invoice number, premises and device, and the total, joined with
 // no separator. The result is 32 lowercase hex characters.
 //
 // Only the holder of the private key can compute it, and it needs no
-// connection to CIS, so a receipt can carry it when CIS can't be reached.
+// connection to CIS, so an invoice can carry it when CIS can't be reached.
 func ZKI(key crypto.Signer, in *ZKIInput) (string, error) {
 	if key == nil {
 		return "", errors.New("no key")
 	}
 	if in == nil || in.Number == nil {
-		return "", errors.New("no receipt number")
+		return "", errors.New("no invoice number")
 	}
 	data := zkiData(in)
 	digest := sha256.Sum256([]byte(data))

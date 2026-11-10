@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var update = flag.Bool("update", false, "write the expected receipts in testdata/out")
+var update = flag.Bool("update", false, "write the expected invoices in testdata/out")
 
 const (
 	examplesDir = "testdata/examples"
@@ -66,15 +66,15 @@ func loadExample(t *testing.T, name string) *gobl.Envelope {
 	return env
 }
 
-// requestFor wraps a receipt in a request with a fixed header.
-func requestFor(r *Receipt) *ReceiptRequest {
-	return &ReceiptRequest{
-		ID: ReceiptRequestID,
+// requestFor wraps an invoice in a request with a fixed header.
+func requestFor(r *Invoice) *InvoiceRequest {
+	return &InvoiceRequest{
+		ID: InvoiceRequestID,
 		Header: &Header{
 			MessageID: "00000000-0000-4000-8000-000000000000",
 			SentAt:    r.IssuedAt,
 		},
-		Receipt: r,
+		Invoice: r,
 	}
 }
 
@@ -99,7 +99,7 @@ func TestExamples(t *testing.T) {
 	key := testKey(t)
 	for _, name := range examples(t) {
 		t.Run(name, func(t *testing.T) {
-			r, err := NewReceipt(loadExample(t, name), testOptions(), key)
+			r, err := NewInvoice(loadExample(t, name), testOptions(), key)
 			require.NoError(t, err)
 			data, err := xml.MarshalIndent(requestFor(r), "", "\t")
 			require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestExamples(t *testing.T) {
 func TestExampleValues(t *testing.T) {
 	key := testKey(t)
 	t.Run("prices with VAT included, paid in cash", func(t *testing.T) {
-		r, err := NewReceipt(loadExample(t, "cash-prices-include-vat.json"), testOptions(), key)
+		r, err := NewInvoice(loadExample(t, "cash-prices-include-vat.json"), testOptions(), key)
 		require.NoError(t, err)
 		assert.Equal(t, invopopOIB, r.IssuerOIB)
 		assert.True(t, r.InVATSystem)
@@ -137,7 +137,7 @@ func TestExampleValues(t *testing.T) {
 		assert.Empty(t, r.BuyerOIB)
 	})
 	t.Run("an exempt line, paid by card and in cash", func(t *testing.T) {
-		r, err := NewReceipt(loadExample(t, "exempt-card-and-cash.json"), testOptions(), key)
+		r, err := NewInvoice(loadExample(t, "exempt-card-and-cash.json"), testOptions(), key)
 		require.NoError(t, err)
 		assert.Equal(t, []*Tax{{Rate: "25.00", Base: "10.00", Amount: "2.50"}}, r.VAT)
 		assert.Equal(t, "20.00", r.VATExemptAmount)
@@ -145,7 +145,7 @@ func TestExampleValues(t *testing.T) {
 		assert.Equal(t, PaymentOther, r.PaymentMethod)
 	})
 	t.Run("a Croatian business buyer, paid by card", func(t *testing.T) {
-		r, err := NewReceipt(loadExample(t, "business-buyer-card.json"), testOptions(), key)
+		r, err := NewInvoice(loadExample(t, "business-buyer-card.json"), testOptions(), key)
 		require.NoError(t, err)
 		assert.Equal(t, []*Tax{{Rate: "5.00", Base: "100.00", Amount: fiveEuros}}, r.VAT)
 		assert.Equal(t, "105.00", r.Total)
@@ -154,9 +154,9 @@ func TestExampleValues(t *testing.T) {
 	})
 }
 
-func TestZKIMatchesReceipt(t *testing.T) {
+func TestZKIMatchesInvoice(t *testing.T) {
 	key := testKey(t)
-	r, err := NewReceipt(loadExample(t, "cash-prices-include-vat.json"), testOptions(), key)
+	r, err := NewInvoice(loadExample(t, "cash-prices-include-vat.json"), testOptions(), key)
 	require.NoError(t, err)
 	zki, err := ZKI(key, &ZKIInput{
 		IssuerOIB: invopopOIB,
@@ -176,7 +176,7 @@ func TestOptions(t *testing.T) {
 	opts.NotInVATSystem = true
 	opts.LateDelivery = true
 	opts.HandwrittenNumber = "123/458/5"
-	r, err := NewReceipt(env, opts, key)
+	r, err := NewInvoice(env, opts, key)
 	require.NoError(t, err)
 	assert.Equal(t, SequenceDevice, r.SequenceScope)
 	assert.False(t, r.InVATSystem)
@@ -226,7 +226,7 @@ func TestErrors(t *testing.T) {
 	}
 
 	t.Run("not an invoice", func(t *testing.T) {
-		_, err := NewReceipt(nil, testOptions(), key)
+		_, err := NewInvoice(nil, testOptions(), key)
 		assert.ErrorIs(t, err, ErrNotInvoice)
 	})
 	t.Run("a reverse charge", func(t *testing.T) {
@@ -296,7 +296,7 @@ func TestExamplesAgainstSchema(t *testing.T) {
 	cert := fixedCertificate(t)
 	var files []string
 	for _, name := range examples(t) {
-		r, err := NewReceipt(loadExample(t, name), testOptions(), cert.Key)
+		r, err := NewInvoice(loadExample(t, name), testOptions(), cert.Key)
 		require.NoError(t, err)
 		signed, err := Sign(cert, requestFor(r))
 		require.NoError(t, err)

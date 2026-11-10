@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var validateXSD = flag.Bool("xsd", false, "validate signed requests and the expected receipts against the schema with xmllint in Docker")
+var validateXSD = flag.Bool("xsd", false, "validate signed requests and the expected invoices against the schema with xmllint in Docker")
 
 func TestSign(t *testing.T) {
 	cert := testCertificate(t)

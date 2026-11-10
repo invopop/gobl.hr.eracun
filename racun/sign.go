@@ -13,7 +13,7 @@ import (
 // last child of its root (§7): exclusive canonicalization, RSA-SHA256, a
 // SHA-256 digest, and a reference to the root's Id. The certificate goes in
 // KeyInfo. It returns the signed request, ready for a SOAP body.
-func Sign(cert *Certificate, req *ReceiptRequest) ([]byte, error) {
+func Sign(cert *Certificate, req *InvoiceRequest) ([]byte, error) {
 	if cert == nil || cert.Cert == nil || cert.Key == nil {
 		return nil, errors.New("no certificate")
 	}

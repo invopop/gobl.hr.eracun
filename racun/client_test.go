@@ -70,7 +70,7 @@ func TestNew(t *testing.T) {
 
 func TestReadRecordedAnswers(t *testing.T) {
 	t.Run("accepted", func(t *testing.T) {
-		res, err := recordedClient(t).readReceiptAnswer(200, readTestdata(t, "testdata/cistest/accepted-answer.xml"))
+		res, err := recordedClient(t).readInvoiceAnswer(200, readTestdata(t, "testdata/cistest/accepted-answer.xml"))
 		require.NoError(t, err)
 		assert.Equal(t, acceptedCassette(t).JIR, res.JIR)
 		assert.Equal(t, acceptedCassette(t).MessageID, res.Header.MessageID)
@@ -78,7 +78,7 @@ func TestReadRecordedAnswers(t *testing.T) {
 	})
 	t.Run("refused", func(t *testing.T) {
 		// CIS answers a refusal with HTTP 500 and a signed RacunOdgovor.
-		res, err := recordedClient(t).readReceiptAnswer(500, readTestdata(t, "testdata/cistest/refused-answer.xml"))
+		res, err := recordedClient(t).readInvoiceAnswer(500, readTestdata(t, "testdata/cistest/refused-answer.xml"))
 		require.ErrorIs(t, err, ErrCIS)
 		assert.Equal(t, "s013", CodeOf(err))
 		assert.Equal(t, "cis: s013: Račun sadrži restriktivne greške: 179", err.Error())
@@ -93,7 +93,7 @@ func TestAnswerSignature(t *testing.T) {
 	accepted := string(readTestdata(t, "testdata/cistest/accepted-answer.xml"))
 	signatureErr := func(t *testing.T, c *Client, answer, msg string) {
 		t.Helper()
-		_, err := c.readReceiptAnswer(200, []byte(answer))
+		_, err := c.readInvoiceAnswer(200, []byte(answer))
 		require.ErrorIs(t, err, ErrSignature)
 		var e *Error
 		require.True(t, errors.As(err, &e))
@@ -185,7 +185,7 @@ func TestReadAnswer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := c.readReceiptAnswer(tt.status, tt.data)
+			_, err := c.readInvoiceAnswer(tt.status, tt.data)
 			require.ErrorIs(t, err, tt.err)
 			var e *Error
 			require.True(t, errors.As(err, &e))
@@ -196,7 +196,7 @@ func TestReadAnswer(t *testing.T) {
 	}
 }
 
-func TestSendReceipt(t *testing.T) {
+func TestSendInvoice(t *testing.T) {
 	accepted := readTestdata(t, "testdata/cistest/accepted-answer.xml")
 
 	t.Run("posts the envelope and reads the answer", func(t *testing.T) {
@@ -208,14 +208,14 @@ func TestSendReceipt(t *testing.T) {
 			w.Write(accepted) //nolint:errcheck
 		})
 		req := testRequest()
-		envelope, err := c.SignReceipt(req)
+		envelope, err := c.SignInvoice(req)
 		require.NoError(t, err)
-		res, err := c.SendReceipt(context.Background(), envelope)
+		res, err := c.SendInvoice(context.Background(), envelope)
 		require.NoError(t, err)
 		assert.Equal(t, acceptedCassette(t).JIR, res.JIR)
 		assert.Equal(t, http.MethodPost, got.Method)
 		assert.Equal(t, "text/xml; charset=utf-8", got.Header.Get("Content-Type"))
-		assert.Equal(t, soapActionReceipt, got.Header.Get("SOAPAction"))
+		assert.Equal(t, soapActionInvoice, got.Header.Get("SOAPAction"))
 		assert.Equal(t, envelope, body)
 	})
 
@@ -246,7 +246,7 @@ func TestSendReceipt(t *testing.T) {
 			calls++
 			http.Redirect(w, r, "/elsewhere", http.StatusTemporaryRedirect)
 		})
-		_, err := c.SendReceipt(context.Background(), envelop([]byte("<x/>")))
+		_, err := c.SendInvoice(context.Background(), envelop([]byte("<x/>")))
 		require.ErrorIs(t, err, ErrConnection)
 		assert.Equal(t, 1, calls)
 	})
@@ -258,7 +258,7 @@ func TestSendReceipt(t *testing.T) {
 		require.NoError(t, l.Close())
 		c, err := newClient(&Config{Certificate: testCertificate(t), CABundle: readTestdata(t, finaCABundle)}, "https://"+addr+"/")
 		require.NoError(t, err)
-		_, err = c.SendReceipt(context.Background(), envelop([]byte("<x/>")))
+		_, err = c.SendInvoice(context.Background(), envelop([]byte("<x/>")))
 		require.ErrorIs(t, err, ErrConnection)
 		var e *Error
 		require.True(t, errors.As(err, &e))
@@ -279,7 +279,7 @@ func TestSendReceipt(t *testing.T) {
 			case <-r.Context().Done():
 			}
 		})
-		_, err := c.SendReceipt(context.Background(), envelop([]byte("<x/>")))
+		_, err := c.SendInvoice(context.Background(), envelop([]byte("<x/>")))
 		require.ErrorIs(t, err, ErrConnection)
 		var e *Error
 		require.True(t, errors.As(err, &e))

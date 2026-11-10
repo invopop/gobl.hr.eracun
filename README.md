@@ -28,9 +28,11 @@ The module provides:
   the rejection, and by agreement between the parties the other Peppol invoice
   response codes.
 
-The module also fiscalizes B2C receipts (Fiscalization 1.0, "fiskalizacija u
-krajnjoj potrošnji") with the Tax Administration's receipt service, in
-`racun/`.
+The module also fiscalizes invoices that are not eRačuni, such as those a
+shop issues at the till (Fiscalization 1.0, "fiskalizacija računa u krajnjoj
+potrošnji"), with the Tax Administration's invoice fiscalization service, in
+`racun/`. Croatian law calls these documents računi (invoices), the same word
+as in eRačun; it has no separate term for a receipt.
 
 The Croatian tax regime itself (`regimes/hr`) lives in GOBL core. This module
 only carries the eRačun addon and format, so that only projects handling
@@ -47,9 +49,10 @@ Croatian eRačuni take on their weight.
   the HR tax categories, the operator (`SellerContact`) and the
   `hrextac:HRFISK20Data` extension; import reads the process, operator, HR
   tax categories and cash-basis flag back into GOBL.
-- `racun/` — B2C receipts: builds the receipt (`RacunZahtjev`) from a GOBL
-  invoice, computes its ZKI (the issuer's protection code), signs it with
-  XML-DSig, and sends it to CIS, checking CIS's signed answer for the JIR.
+- `racun/` — invoice fiscalization: builds the invoice request
+  (`RacunZahtjev`) from a GOBL invoice, computes its ZKI (the issuer's
+  protection code), signs it with XML-DSig, and sends it to CIS, checking
+  CIS's signed answer for the JIR.
   The premises and device labels, the operator's OIB and the numbering scope
   come from `Options` until a B2C addon carries them.
 - the module root is reserved for other eRačun tooling built on top of the
@@ -160,7 +163,7 @@ place cannot be built by any consumer.
 go test ./...
 ```
 
-### B2C receipts (`racun`)
+### Invoice fiscalization (`racun`)
 
 The tests convert the examples in `racun/testdata/examples` and compare them
 with `racun/testdata/out` (`-update` writes them again; the ZKI uses the
@@ -170,7 +173,7 @@ Every call to CIS is replayed from a cassette in `racun/testdata/cistest/`:
 CIS test's real, signed answer (`<name>-answer.xml`) and what the replay
 needs (`<name>.json`: the message ID, when it was sent, the HTTP status and
 the JIR or error code). A normal run fiscalizes each scenario (an accepted
-receipt, a refused one and each example) through the whole client, offline:
+invoice, a refused one and each example) through the whole client, offline:
 it rebuilds the request for the recorded time and message ID, and checks
 CIS's signature on the recorded answer. Only CIS can sign an answer, so the
 cassettes come from CIS test. To record them again, run with `-record` and
@@ -183,7 +186,7 @@ go test ./racun/ -run 'TestCISTest' -record -count=1 -v
 unset CIS_TEST_PASSWORD
 ```
 
-`-xsd` checks signed requests and the expected receipts against
+`-xsd` checks signed requests and the expected invoices against
 `FiskalizacijaSchema.xsd` v1.10 with xmllint in Docker. CI runs it.
 
 ### Examples
@@ -258,7 +261,7 @@ service container, and the schema check.
 - [Tehnička specifikacija: Fiskalizacija eRačuna i eIzvještavanje v1.15](https://porezna.gov.hr/fiskalizacija/api/dokumenti/186) (CIS fiscalization and eReporting, including the rejection reason codes)
 - [HR UBL schematron of 13.03.2026](https://porezna.gov.hr/fiskalizacija/api/dokumenti/197) (rules 1.0.4)
 - [Aplikacijski odgovor v1.1](https://porezna.gov.hr/fiskalizacija/api/dokumenti/206) (application response)
-- Fiskalizacija računa u krajnjoj potrošnji, tehnička specifikacija v2.7, and `FiskalizacijaSchema.xsd` v1.10 (B2C receipts)
+- Fiskalizacija računa u krajnjoj potrošnji, tehnička specifikacija v2.7, and `FiskalizacijaSchema.xsd` v1.10 (invoice fiscalization)
 
 ## License
 

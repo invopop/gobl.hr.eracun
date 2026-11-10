@@ -2,17 +2,17 @@ package racun
 
 import "encoding/xml"
 
-// ReceiptRequestID is the Id attribute of a ReceiptRequest, which its
+// InvoiceRequestID is the Id attribute of an InvoiceRequest, which its
 // signature references as "#RacunZahtjev" (§7).
-const ReceiptRequestID = "RacunZahtjev"
+const InvoiceRequestID = "RacunZahtjev"
 
-// ReceiptRequest fiscalizes one receipt (RacunZahtjev).
-type ReceiptRequest struct {
+// InvoiceRequest fiscalizes one invoice (RacunZahtjev).
+type InvoiceRequest struct {
 	XMLName struct{} `xml:"http://www.apis-it.hr/fin/2012/types/f73 RacunZahtjev"`
-	// ID is the request's Id attribute; set it to ReceiptRequestID.
+	// ID is the request's Id attribute; set it to InvoiceRequestID.
 	ID      string   `xml:"Id,attr"`
 	Header  *Header  `xml:"Zaglavlje"`
-	Receipt *Receipt `xml:"Racun"`
+	Invoice *Invoice `xml:"Racun"`
 }
 
 // Header heads every request (Zaglavlje).
@@ -23,13 +23,15 @@ type Header struct {
 	SentAt string `xml:"DatumVrijeme"`
 }
 
-// Receipt is the data of one receipt (Racun).
-type Receipt struct {
-	// IssuerOIB is the OIB of the business that issues the receipt.
+// Invoice holds the elements of one račun (Racun) that CIS receives:
+// issuer, date and time, number, taxes, total, payment method, operator
+// and ZKI. FromInvoice builds it from a GOBL bill.Invoice.
+type Invoice struct {
+	// IssuerOIB is the OIB of the business that issues the invoice.
 	IssuerOIB string `xml:"Oib"`
 	// InVATSystem says whether the issuer is in the VAT system.
 	InVATSystem bool `xml:"USustPdv"`
-	// IssuedAt is the issue date and time printed on the receipt, in
+	// IssuedAt is the issue date and time printed on the invoice, in
 	// DateTimeFormat.
 	IssuedAt      string        `xml:"DatVrijeme"`
 	SequenceScope SequenceScope `xml:"OznSlijed"`
@@ -55,15 +57,15 @@ type Receipt struct {
 	OperatorOIB string `xml:"OibOper"`
 	// ZKI is the issuer's protection code (ZastKod), from ZKI.
 	ZKI string `xml:"ZastKod"`
-	// LateDelivery is true when the receipt was issued earlier without a
+	// LateDelivery is true when the invoice was issued earlier without a
 	// JIR and is sent again (NakDost).
 	LateDelivery bool `xml:"NakDost"`
-	// HandwrittenNumber is the number of a paper receipt re-entered after
-	// the till broke down (ParagonBrRac).
+	// HandwrittenNumber is the number of an invoice from the bound paper
+	// invoice book, re-entered after the till broke down (ParagonBrRac).
 	HandwrittenNumber string `xml:"ParagonBrRac,omitempty"`
 	// SpecialPurpose is reserved by the Tax Administration (SpecNamj).
 	SpecialPurpose string `xml:"SpecNamj,omitempty"`
-	// BuyerOIB is only for B2B receipts paid in cash or by card
+	// BuyerOIB is only for invoices to businesses paid in cash or by card
 	// (OibPrimateljaRacuna).
 	BuyerOIB string `xml:"OibPrimateljaRacuna,omitempty"`
 }
@@ -71,8 +73,8 @@ type Receipt struct {
 // MarshalXML leaves out the Pdv, Pnp, OstaliPor and Naknade wrappers when
 // their lists are empty, which "a>b,omitempty" tags don't do, and the schema
 // rejects an empty wrapper.
-func (r *Receipt) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
-	// The fields are those of Receipt, in the same order.
+func (r *Invoice) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	// The fields are those of Invoice, in the same order.
 	out := struct {
 		IssuerOIB         string        `xml:"Oib"`
 		InVATSystem       bool          `xml:"USustPdv"`
@@ -139,7 +141,7 @@ type feeList struct {
 	Fees []*Fee `xml:"Naknada"`
 }
 
-// Number identifies a receipt (BrRac). Printed, it reads
+// Number identifies an invoice (BrRac). Printed, it reads
 // "Number/Premises/Device".
 type Number struct {
 	// Sequential is the number in its sequence, digits only (BrOznRac).
@@ -174,13 +176,13 @@ type Fee struct {
 	Amount string `xml:"IznosN"`
 }
 
-// ReceiptResponse is CIS's answer to a ReceiptRequest (RacunOdgovor). It
+// InvoiceResponse is CIS's answer to an InvoiceRequest (RacunOdgovor). It
 // holds a JIR or errors.
-type ReceiptResponse struct {
+type InvoiceResponse struct {
 	XMLName struct{}        `xml:"http://www.apis-it.hr/fin/2012/types/f73 RacunOdgovor"`
 	ID      string          `xml:"Id,attr"`
 	Header  *ResponseHeader `xml:"Zaglavlje"`
-	// JIR is the unique receipt identifier CIS assigns.
+	// JIR is the unique invoice identifier CIS assigns.
 	JIR    string           `xml:"Jir,omitempty"`
 	Errors []*ResponseError `xml:"Greske>Greska,omitempty"`
 }

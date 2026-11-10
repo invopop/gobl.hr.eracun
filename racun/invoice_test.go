@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReceiptRequestXML(t *testing.T) {
+func TestInvoiceRequestXML(t *testing.T) {
 	t.Run("writes the elements in schema order", func(t *testing.T) {
 		out, err := xml.Marshal(testRequest())
 		require.NoError(t, err)
@@ -35,18 +35,18 @@ func TestReceiptRequestXML(t *testing.T) {
 			"<NakDost>true", "<ParagonBrRac>", "<SpecNamj>", "<OibPrimateljaRacuna>",
 		)
 
-		back := new(ReceiptRequest)
+		back := new(InvoiceRequest)
 		require.NoError(t, xml.Unmarshal(out, back))
 		assert.Equal(t, req, back)
 	})
 }
 
-func TestReceiptResponseXML(t *testing.T) {
+func TestInvoiceResponseXML(t *testing.T) {
 	t.Run("reads a JIR", func(t *testing.T) {
 		in := `<tns:RacunOdgovor Id="G0x7f452a31e100-4D" xmlns:tns="http://www.apis-it.hr/fin/2012/types/f73">` +
 			`<tns:Zaglavlje><tns:IdPoruke>24d544c5-859a-47e2-85dc-0e1ce881b819</tns:IdPoruke><tns:DatumVrijeme>06.11.2026T12:58:10</tns:DatumVrijeme></tns:Zaglavlje>` +
 			`<tns:Jir>33663e03-9fb4-4469-8bbe-14118c9ddc1b</tns:Jir></tns:RacunOdgovor>`
-		res := new(ReceiptResponse)
+		res := new(InvoiceResponse)
 		require.NoError(t, xml.Unmarshal([]byte(in), res))
 		assert.Equal(t, "33663e03-9fb4-4469-8bbe-14118c9ddc1b", res.JIR)
 		assert.Equal(t, "24d544c5-859a-47e2-85dc-0e1ce881b819", res.Header.MessageID)
@@ -58,7 +58,7 @@ func TestReceiptResponseXML(t *testing.T) {
 			`<tns:Zaglavlje><tns:IdPoruke>24d544c5-859a-47e2-85dc-0e1ce881b819</tns:IdPoruke><tns:DatumVrijeme>06.11.2026T12:58:10</tns:DatumVrijeme></tns:Zaglavlje>` +
 			`<tns:Greske><tns:Greska><tns:SifraGreske>s005</tns:SifraGreske><tns:PorukaGreske>OIB iz poruke zahtjeva nije jednak OIB-u iz certifikata.</tns:PorukaGreske></tns:Greska></tns:Greske>` +
 			`</tns:RacunOdgovor>`
-		res := new(ReceiptResponse)
+		res := new(InvoiceResponse)
 		require.NoError(t, xml.Unmarshal([]byte(in), res))
 		assert.Empty(t, res.JIR)
 		require.Len(t, res.Errors, 1)

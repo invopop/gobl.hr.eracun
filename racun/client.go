@@ -25,7 +25,7 @@ const (
 	EnvironmentLive Environment = "live"
 )
 
-// endpoints are the receipt service URLs per environment (§3, §6.1). The
+// endpoints are the invoice fiscalization service URLs per environment (§3, §6.1). The
 // port is 8449; the B2B eRačun fiscalization service is on 8509.
 var endpoints = map[Environment]string{
 	EnvironmentSandbox: "https://cistest.apis-it.hr:8449/FiskalizacijaServiceTest",
@@ -40,9 +40,9 @@ var answerSigners = map[Environment]string{
 	EnvironmentLive:    "fiskalcis",
 }
 
-// soapActionReceipt is the SOAP action of the receipt operation (racuni)
+// soapActionInvoice is the SOAP action of the invoice operation (racuni)
 // in the service's WSDL.
-const soapActionReceipt = "http://e-porezna.porezna-uprava.hr/fiskalizacija/2012/services/FiskalizacijaService/racuni"
+const soapActionInvoice = "http://e-porezna.porezna-uprava.hr/fiskalizacija/2012/services/FiskalizacijaService/racuni"
 
 // maxAnswer is the most of an answer that is read. Answers are a few
 // kilobytes.
@@ -65,7 +65,7 @@ type Config struct {
 	CABundle []byte
 }
 
-// Client sends receipts to one CIS environment.
+// Client sends invoices to one CIS environment.
 type Client struct {
 	url    string
 	signer string
@@ -119,15 +119,15 @@ func (c *Client) URL() string {
 	return c.url
 }
 
-// Fiscalize signs a receipt request and sends it, for callers that keep no
+// Fiscalize signs an invoice request and sends it, for callers that keep no
 // record of what they sent. It also checks that the answer is for this
-// request. See SignReceipt and SendReceipt.
-func (c *Client) Fiscalize(ctx context.Context, req *ReceiptRequest) (*ReceiptResponse, error) {
-	envelope, err := c.SignReceipt(req)
+// request. See SignInvoice and SendInvoice.
+func (c *Client) Fiscalize(ctx context.Context, req *InvoiceRequest) (*InvoiceResponse, error) {
+	envelope, err := c.SignInvoice(req)
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.SendReceipt(ctx, envelope)
+	res, err := c.SendInvoice(ctx, envelope)
 	if res != nil && req.Header != nil && res.Header != nil && res.Header.MessageID != req.Header.MessageID {
 		return res, ErrSignature.WithRequestWritten(true).WithMessage(fmt.Sprintf(
 			"the answer is for message %s, not %s", res.Header.MessageID, req.Header.MessageID))
@@ -135,11 +135,11 @@ func (c *Client) Fiscalize(ctx context.Context, req *ReceiptRequest) (*ReceiptRe
 	return res, err
 }
 
-// SignReceipt signs a receipt request and returns the SOAP envelope to
+// SignInvoice signs an invoice request and returns the SOAP envelope to
 // send. Store it before sending: it is the record of what CIS got, and it
 // must be sent exactly as returned, since the signature covers it. An error
 // here is a bug or a certificate problem, never something CIS said.
-func (c *Client) SignReceipt(req *ReceiptRequest) ([]byte, error) {
+func (c *Client) SignInvoice(req *InvoiceRequest) ([]byte, error) {
 	signed, err := Sign(c.cert, req)
 	if err != nil {
 		return nil, err
@@ -147,19 +147,19 @@ func (c *Client) SignReceipt(req *ReceiptRequest) ([]byte, error) {
 	return envelop(signed), nil
 }
 
-// SendReceipt posts an envelope from SignReceipt to CIS and returns its
+// SendInvoice posts an envelope from SignInvoice to CIS and returns its
 // answer, after checking the answer's signature. A refusal returns the
 // answer, with all its errors, and an ErrCIS. Other errors are ErrServer,
 // ErrSignature and ErrConnection, with no answer. It does not retry, and it
 // does not follow a redirect.
 //
 // The answer's MessageID should match the request's; Fiscalize checks it.
-func (c *Client) SendReceipt(ctx context.Context, envelope []byte) (*ReceiptResponse, error) {
-	status, data, err := c.post(ctx, soapActionReceipt, envelope)
+func (c *Client) SendInvoice(ctx context.Context, envelope []byte) (*InvoiceResponse, error) {
+	status, data, err := c.post(ctx, soapActionInvoice, envelope)
 	if err != nil {
 		return nil, err
 	}
-	return c.readReceiptAnswer(status, data)
+	return c.readInvoiceAnswer(status, data)
 }
 
 // post sends a SOAP envelope and returns the HTTP status and body of the

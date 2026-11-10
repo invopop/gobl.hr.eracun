@@ -11,7 +11,7 @@ import (
 // invopopOIB is Invopop's own OIB, the one the demo certificate carries.
 const invopopOIB = "80432461483"
 
-// cisTestScenarios are the receipts sent to CIS test. CIS test does not
+// cisTestScenarios are the invoices sent to CIS test. CIS test does not
 // check that the premises and device exist.
 var cisTestScenarios = []struct {
 	name string
@@ -23,14 +23,14 @@ var cisTestScenarios = []struct {
 	{"refused", "12345678901", false},
 }
 
-// TestCISTest fiscalizes one receipt per scenario through the whole client:
+// TestCISTest fiscalizes one invoice per scenario through the whole client:
 // CIS test accepts one and refuses the other. It replays the cassettes, or
 // records them with -record.
 func TestCISTest(t *testing.T) {
 	for i, s := range cisTestScenarios {
 		t.Run(s.name, func(t *testing.T) {
-			fiscalizeCassette(t, s.name, s.accepted, func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *ReceiptRequest {
-				req, err := cisTestReceipt(cert, receiptNumber(sentAt, i), s.operator, sentAt, messageID)
+			fiscalizeCassette(t, s.name, s.accepted, func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *InvoiceRequest {
+				req, err := cisTestInvoice(cert, invoiceNumber(sentAt, i), s.operator, sentAt, messageID)
 				require.NoError(t, err)
 				return req
 			})
@@ -38,25 +38,25 @@ func TestCISTest(t *testing.T) {
 	}
 }
 
-// receiptNumber is a sequential number for a receipt sent at sentAt, so
+// invoiceNumber is a sequential number for an invoice sent at sentAt, so
 // that a recording never repeats one and a replay rebuilds the same one.
-func receiptNumber(sentAt time.Time, i int) string {
+func invoiceNumber(sentAt time.Time, i int) string {
 	return strconv.FormatInt(sentAt.Unix()%1_000_000*10+int64(i), 10)
 }
 
-// cisTestReceipt is a €12.50 card receipt with 25 % VAT, issued at sentAt
+// cisTestInvoice is a €12.50 card invoice with 25 % VAT, issued at sentAt
 // by Invopop at premises POS1, device 1.
-func cisTestReceipt(cert *Certificate, number, operator string, sentAt time.Time, messageID string) (*ReceiptRequest, error) {
+func cisTestInvoice(cert *Certificate, number, operator string, sentAt time.Time, messageID string) (*InvoiceRequest, error) {
 	now := sentAt.In(location)
 	num := &Number{Sequential: number, Premises: testPremises, Device: "1"}
 	zki, err := ZKI(cert.Key, &ZKIInput{IssuerOIB: invopopOIB, IssuedAt: now, Number: num, Total: testTotal})
 	if err != nil {
 		return nil, err
 	}
-	return &ReceiptRequest{
-		ID:     ReceiptRequestID,
+	return &InvoiceRequest{
+		ID:     InvoiceRequestID,
 		Header: &Header{MessageID: messageID, SentAt: now.Format(DateTimeFormat)},
-		Receipt: &Receipt{
+		Invoice: &Invoice{
 			IssuerOIB:     invopopOIB,
 			InVATSystem:   true,
 			IssuedAt:      now.Format(DateTimeFormat),

@@ -18,18 +18,18 @@ func TestCISTestExamples(t *testing.T) {
 	for i, name := range examples(t) {
 		t.Run(name, func(t *testing.T) {
 			cassette := "example-" + strings.TrimSuffix(name, ".json")
-			fiscalizeCassette(t, cassette, true, func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *ReceiptRequest {
+			fiscalizeCassette(t, cassette, true, func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *InvoiceRequest {
 				inv := loadExample(t, name).Extract().(*bill.Invoice)
 				now := sentAt.In(location)
-				inv.Code = cbc.Code(receiptNumber(sentAt, i))
+				inv.Code = cbc.Code(invoiceNumber(sentAt, i))
 				inv.IssueDate = cal.DateOf(now)
 				inv.IssueTime = cal.NewTime(now.Hour(), now.Minute(), now.Second())
 				r, err := FromInvoice(inv, testOptions(), cert.Key)
 				require.NoError(t, err)
-				return &ReceiptRequest{
-					ID:      ReceiptRequestID,
+				return &InvoiceRequest{
+					ID:      InvoiceRequestID,
 					Header:  &Header{MessageID: messageID, SentAt: now.Format(DateTimeFormat)},
-					Receipt: r,
+					Invoice: r,
 				}
 			})
 		})
