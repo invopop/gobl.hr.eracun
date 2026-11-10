@@ -70,6 +70,12 @@ func (c *Client) readInvoiceAnswer(status int, data []byte) (*InvoiceResponse, e
 		return nil, ErrProtocol.WithRequestWritten(true).WithMessage("reading the answer: " + err.Error()).WithCause(err)
 	}
 
+	// The schema requires the header, and Fiscalize ties the answer to the
+	// request by its message ID.
+	if res.Header == nil || res.Header.MessageID == "" {
+		return nil, ErrProtocol.WithRequestWritten(true).WithMessage("the answer has no message ID")
+	}
+
 	switch {
 	case len(res.Errors) > 0:
 		return res, refusal(res.Errors)

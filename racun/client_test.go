@@ -277,6 +277,17 @@ func TestAnswerBreaksSpecification(t *testing.T) {
 	t.Run("HTTP 200 that is not SOAP", func(t *testing.T) {
 		protocolErr(t, 200, []byte("<html>maintenance</html>"), "not a SOAP envelope")
 	})
+	t.Run("no header", func(t *testing.T) {
+		protocolErr(t, 200, sign(answer(`<Jir>00000000-c7a1-407f-a1b3-14118c9d1b83</Jir>`)), "no message ID")
+	})
+	t.Run("a header with no message ID", func(t *testing.T) {
+		header := `<Zaglavlje><IdPoruke></IdPoruke><DatumVrijeme>10.11.2026T16:18:23</DatumVrijeme></Zaglavlje>`
+		protocolErr(t, 200, sign(answer(header+`<Jir>00000000-c7a1-407f-a1b3-14118c9d1b83</Jir>`)), "no message ID")
+	})
+	t.Run("a refusal with no header", func(t *testing.T) {
+		refusal := `<Greske><Greska><SifraGreske>s005</SifraGreske><PorukaGreske>x</PorukaGreske></Greska></Greske>`
+		protocolErr(t, 500, sign(answer(refusal)), "no message ID")
+	})
 	t.Run("neither a JIR nor errors", func(t *testing.T) {
 		protocolErr(t, 200, sign(answer(answerHeader)), "neither a JIR nor errors")
 	})

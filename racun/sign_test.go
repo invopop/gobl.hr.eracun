@@ -73,6 +73,22 @@ func TestSign(t *testing.T) {
 		_, err = Sign(cert, req)
 		assert.EqualError(t, err, "the request has no Id to reference")
 	})
+
+	t.Run("needs a header with a message ID and a time", func(t *testing.T) {
+		const msg = "the request needs a header with a message ID and the time it is sent"
+		for name, change := range map[string]func(*InvoiceRequest){
+			"no header":     func(r *InvoiceRequest) { r.Header = nil },
+			"no message ID": func(r *InvoiceRequest) { r.Header.MessageID = "" },
+			"no time":       func(r *InvoiceRequest) { r.Header.SentAt = "" },
+		} {
+			t.Run(name, func(t *testing.T) {
+				req := testRequest()
+				change(req)
+				_, err := Sign(cert, req)
+				assert.EqualError(t, err, msg)
+			})
+		}
+	})
 }
 
 func validator(cert *Certificate) *dsig.ValidationContext {

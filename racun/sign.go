@@ -13,12 +13,19 @@ import (
 // last child of its root (§7): exclusive canonicalization, RSA-SHA256, a
 // SHA-256 digest, and a reference to the root's Id. The certificate goes in
 // KeyInfo. It returns the signed request, ready for a SOAP body.
+//
+// The request must have its Id and a header with a message ID and the time
+// it is sent: the schema requires them, and Client.Fiscalize ties the
+// answer to the request by the message ID.
 func Sign(cert *Certificate, req *InvoiceRequest) ([]byte, error) {
 	if cert == nil || cert.Cert == nil || cert.Key == nil {
 		return nil, errors.New("no certificate")
 	}
 	if req.ID == "" {
 		return nil, errors.New("the request has no Id to reference")
+	}
+	if req.Header == nil || req.Header.MessageID == "" || req.Header.SentAt == "" {
+		return nil, errors.New("the request needs a header with a message ID and the time it is sent")
 	}
 	data, err := xml.Marshal(req)
 	if err != nil {
