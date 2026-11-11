@@ -42,7 +42,8 @@ var (
 	ErrProtocol = newError("protocol")
 	// ErrSignature is an answer whose signature does not verify, is
 	// missing, or comes from a certificate other than the CIS one that the
-	// CA bundle trusts (fiskalcis, or fiskalcistest in sandbox). CIS
+	// environment's FINA chain trusts (fiskalcis, or fiskalcistest in
+	// sandbox). CIS
 	// answered, so RequestWritten is true, but nothing in the answer can be
 	// relied on, including whether CIS recorded the invoice.
 	ErrSignature = newError("signature")

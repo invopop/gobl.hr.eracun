@@ -56,6 +56,11 @@ invoices take on their weight.
   CIS's signed answer for the JIR.
   The premises and device labels, the operator's OIB and the numbering scope
   come from `Options` until a B2C addon carries them.
+- `ca/` — the FINA CA certificates that CIS clients trust, embedded: the demo
+  chain for CIS test and the production chain for production CIS. FINA's CAs
+  are not in the system certificate store, and the CIS servers send their
+  TLS certificate without its intermediate. `racun` trusts the chain of its
+  environment and nothing else.
 - the module root is reserved for other eRačun tooling built on top of the
   addon.
 

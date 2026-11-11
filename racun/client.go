@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"sync/atomic"
 	"time"
+
+	"github.com/invopop/gobl.hr.eracun/ca"
 )
 
 // Environment selects which CIS a client talks to.
@@ -40,6 +42,15 @@ var answerSigners = map[Environment]string{
 	EnvironmentLive:    "fiskalcis",
 }
 
+// chains is the FINA chain each environment trusts, for CIS's TLS
+// certificate and for the certificate it signs answers with. Each
+// environment trusts its own chain only: FINA issues demo certificates to
+// any developer.
+var chains = map[Environment]func() *x509.CertPool{
+	EnvironmentSandbox: ca.Demo,
+	EnvironmentLive:    ca.Production,
+}
+
 // soapActionInvoice is the SOAP action of the invoice operation (racuni)
 // in the service's WSDL.
 const soapActionInvoice = "http://e-porezna.porezna-uprava.hr/fiskalizacija/2012/services/FiskalizacijaService/racuni"
@@ -59,10 +70,6 @@ type Config struct {
 	// Certificate is the issuer's FINA fiscalization certificate. It signs
 	// every request.
 	Certificate *Certificate
-	// CABundle holds the PEM certificates trusted for CIS: the FINA chains
-	// that issue its TLS certificate and the certificate it signs answers
-	// with. Nothing else is trusted.
-	CABundle []byte
 }
 
 // Client sends invoices to one CIS environment.
@@ -76,7 +83,8 @@ type Client struct {
 	now func() time.Time
 }
 
-// New checks the configuration and prepares a client.
+// New checks the configuration and prepares a client. The client trusts
+// the FINA chain of its environment, from package ca, and nothing else.
 func New(conf *Config) (*Client, error) {
 	if conf == nil {
 		return nil, errors.New("no configuration")
@@ -85,18 +93,14 @@ func New(conf *Config) (*Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown CIS environment %q", conf.Environment)
 	}
-	return newClient(conf, endpoint)
+	return newClient(conf, endpoint, chains[conf.Environment]())
 }
 
-// newClient prepares a client that calls endpoint. Tests use it directly to
-// call a local server.
-func newClient(conf *Config, endpoint string) (*Client, error) {
+// newClient prepares a client that calls endpoint and trusts roots. Tests
+// use it directly to call a local server.
+func newClient(conf *Config, endpoint string, roots *x509.CertPool) (*Client, error) {
 	if conf.Certificate == nil || conf.Certificate.Cert == nil || conf.Certificate.Key == nil {
 		return nil, errors.New("a signing certificate is required")
-	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(conf.CABundle) {
-		return nil, errors.New("the CA bundle holds no PEM certificate")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}

@@ -146,8 +146,8 @@ func refusal(errs []*ResponseError) error {
 
 // verifyAnswer checks the enveloped signature of an answer message: that it
 // covers the message, that the certificate in KeyInfo has the CIS common name
-// for the environment and chains to the CA bundle, and that the digest and
-// signature value are right. It returns the signed message.
+// for the environment and chains to the environment's FINA chain, and that
+// the digest and signature value are right. It returns the signed message.
 func (c *Client) verifyAnswer(msg *etree.Element) (*etree.Element, error) {
 	cert, err := keyInfoCertificate(msg)
 	if err != nil {

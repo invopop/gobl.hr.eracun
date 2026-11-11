@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"io"
 	"math/big"
@@ -22,6 +21,8 @@ import (
 	dsig "github.com/russellhaering/goxmldsig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/invopop/gobl.hr.eracun/ca"
 )
 
 func readTestdata(t *testing.T, name string) []byte {
@@ -31,14 +32,13 @@ func readTestdata(t *testing.T, name string) []byte {
 	return data
 }
 
-// recordedClient is a sandbox client that trusts the FINA CA bundle and
+// recordedClient is a sandbox client that trusts FINA's demo chain and
 // checks certificates when the accepted cassette was recorded.
 func recordedClient(t *testing.T) *Client {
 	t.Helper()
 	c, err := New(&Config{
 		Environment: EnvironmentSandbox,
 		Certificate: testCertificate(t),
-		CABundle:    readTestdata(t, finaCABundle),
 	})
 	require.NoError(t, err)
 	sentAt := acceptedCassette(t).SentAt
@@ -47,21 +47,22 @@ func recordedClient(t *testing.T) *Client {
 }
 
 func TestNew(t *testing.T) {
-	bundle := readTestdata(t, finaCABundle)
 	t.Run("sandbox", func(t *testing.T) {
-		c, err := New(&Config{Environment: EnvironmentSandbox, Certificate: testCertificate(t), CABundle: bundle})
+		c, err := New(&Config{Environment: EnvironmentSandbox, Certificate: testCertificate(t)})
 		require.NoError(t, err)
 		assert.Equal(t, "https://cistest.apis-it.hr:8449/FiskalizacijaServiceTest", c.URL())
 		assert.Equal(t, "fiskalcistest", c.signer)
+		assert.True(t, c.roots.Equal(ca.Demo()), "the sandbox trusts FINA's demo chain only")
 	})
 	t.Run("live", func(t *testing.T) {
-		c, err := New(&Config{Environment: EnvironmentLive, Certificate: testCertificate(t), CABundle: bundle})
+		c, err := New(&Config{Environment: EnvironmentLive, Certificate: testCertificate(t)})
 		require.NoError(t, err)
 		assert.Equal(t, "https://cis.porezna-uprava.hr:8449/FiskalizacijaService", c.URL())
 		assert.Equal(t, "fiskalcis", c.signer)
+		assert.True(t, c.roots.Equal(ca.Production()), "live trusts FINA's production chain only")
 	})
 	t.Run("unknown environment", func(t *testing.T) {
-		_, err := New(&Config{Environment: "test", Certificate: testCertificate(t), CABundle: bundle})
+		_, err := New(&Config{Environment: "test", Certificate: testCertificate(t)})
 		assert.ErrorContains(t, err, "unknown CIS environment")
 	})
 	t.Run("no configuration", func(t *testing.T) {
@@ -69,12 +70,8 @@ func TestNew(t *testing.T) {
 		assert.EqualError(t, err, "no configuration")
 	})
 	t.Run("no certificate", func(t *testing.T) {
-		_, err := New(&Config{Environment: EnvironmentSandbox, CABundle: bundle})
+		_, err := New(&Config{Environment: EnvironmentSandbox})
 		assert.ErrorContains(t, err, "certificate is required")
-	})
-	t.Run("no CA bundle", func(t *testing.T) {
-		_, err := New(&Config{Environment: EnvironmentSandbox, Certificate: testCertificate(t)})
-		assert.ErrorContains(t, err, "no PEM certificate")
 	})
 }
 
@@ -130,9 +127,10 @@ func TestAnswerSignature(t *testing.T) {
 		c.now = func() time.Time { return time.Date(2028, 7, 7, 0, 0, 0, 0, time.UTC) }
 		signatureErr(t, c, accepted, "not trusted")
 	})
-	t.Run("a CA bundle without the demo chain", func(t *testing.T) {
+	t.Run("the production chain", func(t *testing.T) {
+		// A live client refuses an answer signed under the demo chain.
 		c := recordedClient(t)
-		c.roots = certPool(t, readTestdata(t, finaCABundle), "Fina Root CA")
+		c.roots = ca.Production()
 		signatureErr(t, c, accepted, "not trusted")
 	})
 }
@@ -357,7 +355,7 @@ func TestSendInvoice(t *testing.T) {
 		require.NoError(t, err)
 		addr := l.Addr().String()
 		require.NoError(t, l.Close())
-		c, err := newClient(&Config{Certificate: testCertificate(t), CABundle: readTestdata(t, finaCABundle)}, "https://"+addr+"/")
+		c, err := newClient(&Config{Certificate: testCertificate(t)}, "https://"+addr+"/", ca.Demo())
 		require.NoError(t, err)
 		_, err = c.SendInvoice(context.Background(), envelop([]byte("<x/>")))
 		require.ErrorIs(t, err, ErrConnection)
@@ -389,43 +387,20 @@ func TestSendInvoice(t *testing.T) {
 }
 
 // serverClient starts a TLS server with handler and returns a sandbox
-// client that calls it, trusting its certificate and the FINA CA bundle,
+// client that calls it, trusting its certificate and FINA's demo chain,
 // with certificates checked when the accepted cassette was recorded.
 func serverClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
-	bundle := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
-	bundle = append(bundle, readTestdata(t, finaCABundle)...)
+	roots := ca.Demo()
+	roots.AddCert(srv.Certificate())
 	c, err := newClient(&Config{
 		Environment: EnvironmentSandbox,
 		Certificate: testCertificate(t),
-		CABundle:    bundle,
-	}, srv.URL)
+	}, srv.URL, roots)
 	require.NoError(t, err)
 	sentAt := acceptedCassette(t).SentAt
 	c.now = func() time.Time { return sentAt }
 	return c
-}
-
-// certPool is a pool of the certificates in a PEM bundle whose common name
-// is one of names.
-func certPool(t *testing.T, bundle []byte, names ...string) *x509.CertPool {
-	t.Helper()
-	pool := x509.NewCertPool()
-	for rest := bundle; ; {
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		if block == nil {
-			break
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		require.NoError(t, err)
-		for _, n := range names {
-			if cert.Subject.CommonName == n {
-				pool.AddCert(cert)
-			}
-		}
-	}
-	return pool
 }

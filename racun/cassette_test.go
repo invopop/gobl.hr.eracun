@@ -36,11 +36,8 @@ const (
 	envPassword = "CIS_TEST_PASSWORD"
 )
 
-// Where the client finds the FINA CA bundle, and where the cassettes live.
-const (
-	finaCABundle = "testdata/fina-ca.pem"
-	cisTestDir   = "testdata/cistest"
-)
+// cisTestDir is where the cassettes live.
+const cisTestDir = "testdata/cistest"
 
 // cassette is what a replay needs besides CIS's answer, which is kept next
 // to it in <name>-answer.xml.
@@ -132,7 +129,7 @@ func recordCassette(t *testing.T, name string, wantAccepted bool, build buildReq
 	}
 	cert, err := LoadCertificate(path, password)
 	require.NoError(t, err)
-	client, err := New(&Config{Environment: EnvironmentSandbox, Certificate: cert, CABundle: readTestdata(t, finaCABundle)})
+	client, err := New(&Config{Environment: EnvironmentSandbox, Certificate: cert})
 	require.NoError(t, err)
 	rec := &recorder{next: client.conn.Transport}
 	client.conn.Transport = rec
