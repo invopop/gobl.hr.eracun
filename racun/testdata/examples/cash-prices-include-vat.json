@@ -1,13 +1,21 @@
 {
 	"$schema": "https://gobl.org/draft-0/bill/invoice",
+	"$addons": ["hr-fiskal-b2c-v1"],
 	"code": "1001",
 	"issue_date": "2026-11-06",
 	"issue_time": "13:58:10",
 	"currency": "EUR",
-	"tax": { "prices_include": "VAT" },
+	"tax": { "prices_include": "VAT", "ext": { "hr-fiskal-premises": "POS1", "hr-fiskal-device": "1" } },
 	"supplier": {
 		"name": "Invopop d.o.o.",
-		"tax_id": { "country": "HR", "code": "80432461483" }
+		"tax_id": { "country": "HR", "code": "80432461483" },
+		"people": [
+			{
+				"key": "operator",
+				"name": { "given": "Ivan", "surname": "Horvat" },
+				"identities": [{ "type": "OIB", "code": "80432461483" }]
+			}
+		]
 	},
 	"lines": [
 		{

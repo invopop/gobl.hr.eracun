@@ -1,0 +1,50 @@
+$schema: "https://gobl.org/draft-0/bill/invoice"
+$regime: "HR"
+$addons: ["hr-fiskal-b2c-v1"]
+uuid: "019a5a3e-6c1e-7d4a-9b8e-2f4c6a8d0e12"
+type: standard
+code: "1001"
+issue_date: "2026-11-06"
+issue_time: "13:58:10"
+currency: "EUR"
+tax:
+  prices_include: VAT
+  ext:
+    hr-fiskal-premises: "POS1"
+    hr-fiskal-device: "1"
+
+supplier:
+  name: "Invopop d.o.o."
+  tax_id:
+    country: "HR"
+    code: "80432461483"
+  people:
+    - key: operator
+      name:
+        given: "Ivan"
+        surname: "Horvat"
+      identities:
+        - type: OIB
+          code: "80432461483"
+
+lines:
+  - quantity: 2
+    item:
+      name: "Kava"
+      price: "2.50"
+    taxes:
+      - cat: VAT
+        rate: general
+  - quantity: 1
+    item:
+      name: "Sendvič"
+      price: "5.65"
+    taxes:
+      - cat: VAT
+        rate: reduced
+
+payment:
+  advances:
+    - key: cash
+      description: "Gotovina"
+      percent: "100%"

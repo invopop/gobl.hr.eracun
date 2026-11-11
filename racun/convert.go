@@ -1,11 +1,13 @@
 // Converting a GOBL invoice into the Invoice CIS fiscalizes (Racun).
 //
-// Most of the Invoice comes from the GOBL invoice: the issuer's OIB, the issue
-// date and time, the sequential number, the VAT breakdown, the total, the
-// payment method and the buyer's OIB. The values a GOBL invoice can't carry
-// yet come from Options: the business premises and device labels, the
-// operator's OIB, the numbering scope, and whether the Invoice is sent late.
-// A B2C addon is meant to carry them as extensions.
+// The GOBL invoice must declare the hr-fiskal-b2c-v1 addon (package
+// addon/fiskal) and be valid: the addon's rules check the fields the Invoice
+// takes, so the conversion does not check their format again. The Invoice
+// takes the issuer's OIB, the issue date and time, the number with the
+// business premises and device labels, the numbering scope, the VAT system,
+// the VAT breakdown, the total, the payment method, the operator's OIB, the
+// paper invoice number and the buyer's OIB from the invoice. Only whether
+// the Invoice is sent late comes from Options.
 
 package racun
 
@@ -13,7 +15,6 @@ import (
 	"crypto"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/invopop/gobl"
@@ -23,17 +24,20 @@ import (
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/num"
+	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/pay"
+	"github.com/invopop/gobl/regimes/hr"
 	"github.com/invopop/gobl/tax"
 
 	eracun "github.com/invopop/gobl.hr.eracun/addon"
+	"github.com/invopop/gobl.hr.eracun/addon/fiskal"
 )
 
 // Errors the conversion returns, wrapped with the field they are about.
 var (
 	// ErrNotInvoice is an envelope that holds no invoice.
 	ErrNotInvoice = errors.New("envelope does not hold an invoice")
-	// ErrMissing is an invoice or options without a field fiscalization
+	// ErrMissing is an invoice without a field or addon fiscalization
 	// requires.
 	ErrMissing = errors.New("missing a field fiscalization requires")
 	// ErrInvalid is a field whose value fiscalization can't take.
@@ -42,45 +46,18 @@ var (
 	ErrUnsupported = errors.New("not supported for fiscalization yet")
 )
 
-var (
-	// sequentialPattern is an invoice number: digits with no leading zero
-	// (BrOznRac).
-	sequentialPattern = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
-	// premisesPattern is a business premises label (OznPosPr).
-	premisesPattern = regexp.MustCompile(`^[0-9a-zA-Z]{1,20}$`)
-	// devicePattern is a device label (OznNapUr).
-	devicePattern = regexp.MustCompile(`^[0-9]{1,20}$`)
-	// oibPattern is an OIB.
-	oibPattern = regexp.MustCompile(`^[0-9]{11}$`)
-)
-
-// Options are the Invoice values a GOBL invoice doesn't carry yet.
+// Options are the Invoice values that are not in the GOBL invoice, as they
+// depend on when it is sent.
 type Options struct {
-	// Premises is the business premises label registered in ePorezna
-	// (OznPosPr): letters and digits.
-	Premises string
-	// Device is the label of the till that issued the invoice (OznNapUr):
-	// digits.
-	Device string
-	// SequenceScope says whether invoice numbers count per premises or per
-	// device. The default is per premises.
-	SequenceScope SequenceScope
-	// OperatorOIB is the OIB of the person at the till, or the issuer's OIB
-	// for a self-service device.
-	OperatorOIB string
-	// NotInVATSystem is true for an issuer outside the VAT system.
-	NotInVATSystem bool
 	// LateDelivery is true when the invoice was issued without a JIR and
-	// is sent again (NakDost).
+	// is sent again (NakDost). An invoice with a paper invoice number is
+	// always late.
 	LateDelivery bool
-	// HandwrittenNumber is the number of an invoice from the bound paper
-	// invoice book, entered after the till broke down (ParagonBrRac).
-	HandwrittenNumber string
 }
 
 // NewInvoice builds the Invoice of the GOBL invoice in the envelope, with its ZKI
 // computed with key, the issuer's private key. The envelope must be
-// calculated.
+// calculated and valid.
 func NewInvoice(env *gobl.Envelope, opts *Options, key crypto.Signer) (*Invoice, error) {
 	if env == nil {
 		return nil, ErrNotInvoice
@@ -92,7 +69,8 @@ func NewInvoice(env *gobl.Envelope, opts *Options, key crypto.Signer) (*Invoice,
 	return FromInvoice(inv, opts, key)
 }
 
-// FromInvoice builds the Invoice of a calculated GOBL invoice, with its ZKI
+// FromInvoice builds the Invoice of a calculated and valid GOBL invoice with
+// the hr-fiskal-b2c-v1 addon, with its ZKI
 // computed with key, the issuer's private key. The ZKI goes on the printed
 // invoice and does not change when the Invoice is sent again.
 func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice, error) {
@@ -113,28 +91,30 @@ func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice,
 		return nil, err
 	}
 	r.IssuedAt = formatDateTime(issuedAt, "T")
-	if r.Number, err = number(inv, opts); err != nil {
+	ext := inv.Tax.Ext
+	if r.Number, err = number(inv); err != nil {
 		return nil, err
 	}
-	r.SequenceScope = opts.SequenceScope
-	if r.SequenceScope == "" {
-		r.SequenceScope = SequencePremises
+	r.SequenceScope = SequencePremises
+	if ext.Get(fiskal.ExtKeySequenceScope) == fiskal.SequenceDevice {
+		r.SequenceScope = SequenceDevice
 	}
-	if r.SequenceScope != SequencePremises && r.SequenceScope != SequenceDevice {
-		return nil, fmt.Errorf("sequence scope %q %w", r.SequenceScope, ErrInvalid)
-	}
-	r.InVATSystem = !opts.NotInVATSystem
+	r.InVATSystem = ext.Get(fiskal.ExtKeyVATSystem) != fiskal.VATSystemOut
 	if err := addTaxes(r, inv); err != nil {
 		return nil, err
 	}
 	r.Total = amount(inv.Totals.Payable)
 	r.PaymentMethod = paymentMethod(inv.Payment)
-	if r.OperatorOIB, err = oib("operator OIB", opts.OperatorOIB); err != nil {
+	if r.OperatorOIB, err = operatorOIB(inv); err != nil {
 		return nil, err
 	}
-	r.LateDelivery = opts.LateDelivery
-	r.HandwrittenNumber = opts.HandwrittenNumber
-	r.BuyerOIB = buyerOIB(inv)
+	r.HandwrittenNumber = ext.Get(fiskal.ExtKeyPaperNumber).String()
+	r.LateDelivery = opts.LateDelivery || r.HandwrittenNumber != ""
+	// CIS refuses a buyer's OIB on an invoice paid by bank transfer (error
+	// 181, §2.1.5).
+	if r.PaymentMethod != PaymentTransfer {
+		r.BuyerOIB = buyerOIB(inv)
+	}
 
 	r.ZKI, err = ZKI(key, &ZKIInput{
 		IssuerOIB: r.IssuerOIB,
@@ -153,6 +133,10 @@ func checkInvoice(inv *bill.Invoice) error {
 	switch {
 	case inv == nil:
 		return ErrNotInvoice
+	case !fiskal.V1.In(inv.GetAddons()...):
+		return fmt.Errorf("addon %s %w", fiskal.V1, ErrMissing)
+	case inv.Tax == nil:
+		return fmt.Errorf("tax %w", ErrMissing)
 	case inv.Totals == nil:
 		return fmt.Errorf("totals %w: calculate the invoice first", ErrMissing)
 	case inv.Type != bill.InvoiceTypeStandard:
@@ -190,17 +174,20 @@ func issuerOIB(inv *bill.Invoice) (string, error) {
 	if inv.Supplier.TaxID.Country != l10n.HR.Tax() {
 		return "", fmt.Errorf("supplier tax ID country %q %w: the issuer must be Croatian", inv.Supplier.TaxID.Country, ErrInvalid)
 	}
-	return oib("supplier tax ID", inv.Supplier.TaxID.Code.String())
+	return inv.Supplier.TaxID.Code.String(), nil
 }
 
-func oib(field, code string) (string, error) {
-	if code == "" {
-		return "", fmt.Errorf("%s %w", field, ErrMissing)
+// operatorOIB is the OIB of the supplier person with the operator key.
+func operatorOIB(inv *bill.Invoice) (string, error) {
+	op := eracun.Operator(inv.Supplier.People)
+	if op == nil {
+		return "", fmt.Errorf("operator %w: a supplier person with the %q key", ErrMissing, eracun.PersonKeyOperator)
 	}
-	if !oibPattern.MatchString(code) {
-		return "", fmt.Errorf("%s %q %w: an OIB is 11 digits", field, code, ErrInvalid)
+	id := org.IdentityForType(op.Identities, hr.IdentityTypeOIB)
+	if id == nil {
+		return "", fmt.Errorf("operator OIB %w", ErrMissing)
 	}
-	return code, nil
+	return id.Code.String(), nil
 }
 
 // issueTime is the issue date and time of the invoice. GOBL dates and times
@@ -216,25 +203,24 @@ func issueTime(inv *bill.Invoice) (cal.DateTime, error) {
 	return cal.MakeDateTime(d.Year, d.Month, d.Day, t.Hour, t.Minute, t.Second), nil
 }
 
-// number is the invoice number: the GOBL invoice code, which must be the bare
-// sequential number, and the premises and device labels from opts.
-func number(inv *bill.Invoice, opts *Options) (*Number, error) {
-	code := inv.Code.String()
-	switch {
-	case code == "":
-		return nil, fmt.Errorf("invoice code %w", ErrMissing)
-	case !sequentialPattern.MatchString(code):
-		return nil, fmt.Errorf("invoice code %q %w: digits with no leading zero", code, ErrInvalid)
-	case opts.Premises == "":
-		return nil, fmt.Errorf("premises label %w", ErrMissing)
-	case !premisesPattern.MatchString(opts.Premises):
-		return nil, fmt.Errorf("premises label %q %w: up to 20 letters and digits", opts.Premises, ErrInvalid)
-	case opts.Device == "":
-		return nil, fmt.Errorf("device label %w", ErrMissing)
-	case !devicePattern.MatchString(opts.Device):
-		return nil, fmt.Errorf("device label %q %w: up to 20 digits", opts.Device, ErrInvalid)
+// number is the invoice number: the GOBL invoice code, which the addon
+// requires to be the bare sequential number, and the business premises and
+// device labels.
+func number(inv *bill.Invoice) (*Number, error) {
+	n := &Number{
+		Sequential: inv.Code.String(),
+		Premises:   inv.Tax.Ext.Get(fiskal.ExtKeyPremises).String(),
+		Device:     inv.Tax.Ext.Get(fiskal.ExtKeyDevice).String(),
 	}
-	return &Number{Sequential: code, Premises: opts.Premises, Device: opts.Device}, nil
+	switch {
+	case n.Sequential == "":
+		return nil, fmt.Errorf("invoice code %w", ErrMissing)
+	case n.Premises == "":
+		return nil, fmt.Errorf("premises label (%s) %w", fiskal.ExtKeyPremises, ErrMissing)
+	case n.Device == "":
+		return nil, fmt.Errorf("device label (%s) %w", fiskal.ExtKeyDevice, ErrMissing)
+	}
+	return n, nil
 }
 
 // addTaxes adds the VAT breakdown: one entry per rate with a percentage, and
@@ -338,7 +324,8 @@ func meansMethod(k cbc.Key) PaymentMethod {
 	return PaymentOther
 }
 
-// buyerOIB is the customer's OIB, for an invoice to a Croatian business.
+// buyerOIB is the customer's OIB, for an invoice to a Croatian business. It
+// is mandatory for one paid in cash or by card (§2.1.1.1).
 func buyerOIB(inv *bill.Invoice) string {
 	c := inv.Customer
 	if c == nil || c.TaxID == nil || c.TaxID.Country != l10n.HR.Tax() {

@@ -30,8 +30,9 @@ The module provides:
 
 The module also fiscalizes invoices that are not eRačuni, such as those a
 shop issues at the till (Fiscalization 1.0, "fiskalizacija računa u krajnjoj
-potrošnji"), with the Tax Administration's invoice fiscalization service, in
-`racun/`. Croatian law calls these documents računi (invoices), the same word
+potrošnji"), with the Tax Administration's invoice fiscalization service:
+the GOBL addon `hr-fiskal-b2c-v1` in `addon/fiskal/`, and the conversion and
+client in `racun/`. Croatian law calls these documents računi (invoices), the same word
 as in eRačun; it has no separate term for a receipt.
 
 The Croatian tax regime itself (`regimes/hr`) lives in GOBL core. This module
@@ -50,12 +51,17 @@ invoices take on their weight.
   the HR tax categories, the operator (`SellerContact`) and the
   `hrextac:HRFISK20Data` extension; import reads the process, operator, HR
   tax categories and cash-basis flag back into GOBL.
+- `addon/fiskal/` — the GOBL addon `hr-fiskal-b2c-v1` for invoices
+  fiscalized at the time of the sale: the business premises and device
+  labels, the numbering scope, the VAT system and the paper invoice number as
+  extensions of the invoice tax, the operator as a supplier person (as in
+  `hr-eracun-v1`), and the rules CIS needs met. It also defines the stamps of
+  a fiscalized invoice: `fiskal-zki`, `fiskal-jir` and `fiskal-qr`.
 - `racun/` — invoice fiscalization: builds the invoice request
-  (`RacunZahtjev`) from a GOBL invoice, computes its ZKI (the issuer's
-  protection code), signs it with XML-DSig, and sends it to CIS, checking
-  CIS's signed answer for the JIR.
-  The premises and device labels, the operator's OIB and the numbering scope
-  come from `Options` until a B2C addon carries them.
+  (`RacunZahtjev`) from a GOBL invoice with the `hr-fiskal-b2c-v1` addon,
+  computes its ZKI (the issuer's protection code), signs it with XML-DSig,
+  and sends it to CIS, checking CIS's signed answer for the JIR. `AddStamps`
+  adds the ZKI, the JIR and the QR code URL to the envelope.
 - `ca/` — the FINA CA certificates that CIS clients trust, embedded: the demo
   chain for CIS test and the production chain for production CIS. FINA's CAs
   are not in the system certificate store, and the CIS servers send their
@@ -91,6 +97,19 @@ from gobl.ubl, or `convert.Import`/`convert.Export`.
 | `hr-eracun-process` | Business process (BT-23), written to the UBL `ProfileID`: `P1` to `P12`, or `P99:` followed by a label agreed with the buyer. |
 | `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`) and any other non-taxable fee charged with taxable items (`N`), which are set on an exempt combo. |
 | `hr-eracun-rejection-reason` | Kind of reason for rejecting an invoice (AR-BT-12): `N`, `U` or `O`, the same code the buyer reports to the Tax Administration. |
+
+The `hr-fiskal-b2c-v1` addon sets these on the invoice tax:
+
+| Key | Description |
+| --- | --- |
+| `hr-fiskal-premises` | Business premises label registered in ePorezna (`OznPosPr`): up to 20 letters and digits. Required. |
+| `hr-fiskal-device` | Label of the device that issued the invoice (`OznNapUr`): up to 20 digits with no leading zero. Required. |
+| `hr-fiskal-sequence-scope` | What the invoice numbers count within (`OznSlijed`): `P` per business premises (the default) or `N` per device. |
+| `hr-fiskal-vat-system` | Whether the issuer is in the VAT system (`USustPdv`): `Y` (the default) or `N`. An issuer outside it charges no VAT. |
+| `hr-fiskal-paper-number` | Number of an invoice from the bound paper invoice book, entered after the till broke down (`ParagonBrRac`): up to 100 characters. Such an invoice is sent late. |
+
+The invoice code is the bare sequential number (`BrOznRac`): digits with no
+leading zero.
 
 The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
 invoice is paid. The regime adds the legal VAT note, and the UBL export writes

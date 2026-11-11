@@ -4,9 +4,10 @@ import (
 	"flag"
 	"testing"
 
-	// Register the Croatian eRačun addon so example documents declaring the
-	// hr-eracun-v1 addon normalize and validate.
+	// Register the Croatian addons so example documents declaring the
+	// hr-eracun-v1 or hr-fiskal-b2c-v1 addon normalize and validate.
 	_ "github.com/invopop/gobl.hr.eracun/addon"
+	_ "github.com/invopop/gobl.hr.eracun/addon/fiskal"
 
 	"github.com/invopop/gobl/pkg/examples"
 )
