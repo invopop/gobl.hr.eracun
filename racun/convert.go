@@ -165,6 +165,11 @@ func checkInvoice(inv *bill.Invoice) error {
 		return fmt.Errorf("currency %q %w: fiscalized invoices are in euros", inv.Currency, ErrInvalid)
 	case inv.Totals.Payable.IsNegative():
 		return fmt.Errorf("negative total %w", ErrUnsupported)
+	case inv.Totals.Rounding != nil && !inv.Totals.Rounding.IsZero():
+		// GOBL adds the rounding to Totals.Payable, so to the total and the
+		// ZKI, but to no tax breakdown, and the request has no element for
+		// it.
+		return fmt.Errorf("rounding %s %w", inv.Totals.Rounding, ErrUnsupported)
 	}
 	// A charge or discount with VAT is in Totals.Taxes, so the VAT
 	// breakdown includes it. One without taxes changes the total but no

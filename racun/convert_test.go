@@ -286,6 +286,16 @@ func TestErrors(t *testing.T) {
 		require.ErrorIs(t, err, ErrUnsupported)
 		assert.ErrorContains(t, err, "Promo")
 	})
+	t.Run("a rounding amount", func(t *testing.T) {
+		inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+		rounding := num.MakeAmount(-5, 2)
+		inv.Totals.Rounding = &rounding
+		require.NoError(t, inv.Calculate())
+		require.Equal(t, "10.60", inv.Totals.Payable.String())
+		_, err := FromInvoice(inv, testOptions(), key)
+		require.ErrorIs(t, err, ErrUnsupported)
+		assert.ErrorContains(t, err, "rounding -0.05")
+	})
 	t.Run("not an invoice", func(t *testing.T) {
 		_, err := NewInvoice(nil, testOptions(), key)
 		assert.ErrorIs(t, err, ErrNotInvoice)
