@@ -166,12 +166,20 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
-		// Rules 18 to 22 refuse what the racun conversion does not support
-		// yet. A valid invoice must always convert: Invopop numbers it before
-		// it is fiscalized, and a numbered invoice that is never issued
-		// leaves a gap in the sequence, which Art. 9(2) of the
-		// Fiscalization Act forbids. Drop a rule when racun supports the
-		// case.
+		// Rules 18 to 22 refuse what the racun conversion refuses. A valid
+		// invoice must always convert: Invopop numbers it before it is
+		// fiscalized, and a numbered invoice that is never issued leaves a
+		// gap in the sequence, which Art. 9(2) of the Fiscalization Act
+		// forbids.
+		//
+		// Rules 18, 19 and 21 are cases racun does not support yet:
+		// corrections (EU3-29) and fees (EU3-34). Drop a rule when racun
+		// supports its case.
+		//
+		// Rules 20 and 22 stay: the invoice request has no element for a
+		// rounding amount or a discount without taxes. Both change the total
+		// but no tax breakdown, and CIS checks that the total is the sum of
+		// the breakdowns (check v166, spec v2.7, p. 212).
 		rules.Field("type",
 			rules.Assert("18", "invoice type must be standard: corrections are not supported yet", is.In(bill.InvoiceTypeStandard)),
 		),
@@ -201,7 +209,9 @@ func billInvoiceRules() *rules.Set {
 }
 
 // taxComboRules refuse the taxes that the racun conversion does not support
-// yet, for the same reason as rules 18 to 22 of the invoice.
+// yet, for the same reason as rules 18 to 22 of the invoice: taxes other
+// than VAT (EU3-34), and reverse charge, whose report to CIS is still to
+// confirm.
 func taxComboRules() *rules.Set {
 	return rules.For(new(tax.Combo),
 		rules.Field("cat",

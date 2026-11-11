@@ -99,11 +99,14 @@ func newAddon() *tax.AddonDef {
 				Once fiscalized, the invoice is stamped with the ZKI, the JIR and the
 				URL of the QR code to print.
 
-				Some invoices can't be fiscalized yet, and are refused before they
-				are numbered, so that no number is lost (the sequence must have no
-				gaps, Art. 9(2) of the Fiscalization Act): credit notes and other
-				corrections, negative totals, a rounding amount, charges and discounts
-				without VAT, taxes other than VAT, and reverse charge.
+				Some invoices can't be fiscalized, and are refused before they are
+				numbered, so that no number is lost (the sequence must have no
+				gaps, Art. 9(2) of the Fiscalization Act). Credit notes and other
+				corrections, negative totals, charges without VAT, taxes other
+				than VAT, and reverse charge are not supported yet. A rounding
+				amount and a discount without VAT are never accepted: the invoice
+				request has no element for them, and CIS checks that the total is
+				the sum of the tax breakdowns.
 			`),
 		},
 		Sources: []*cbc.Source{
