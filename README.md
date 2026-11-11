@@ -105,8 +105,13 @@ The `hr-fiskal-b2c-v1` addon sets these on the invoice tax:
 | `hr-fiskal-premises` | Business premises label registered in ePorezna (`OznPosPr`): up to 20 letters and digits. Required. |
 | `hr-fiskal-device` | Label of the device that issued the invoice (`OznNapUr`): up to 20 digits with no leading zero. Required. |
 | `hr-fiskal-sequence-scope` | What the invoice numbers count within (`OznSlijed`): `P` per business premises (the default) or `N` per device. |
-| `hr-fiskal-vat-system` | Whether the issuer is in the VAT system (`USustPdv`): `Y` (the default) or `N`. An issuer outside it charges no VAT. |
 | `hr-fiskal-paper-number` | Number of an invoice from the bound paper invoice book, entered after the till broke down (`ParagonBrRac`): up to 100 characters. Such an invoice is sent late. |
+
+The supplier party carries one more:
+
+| Key | Description |
+| --- | --- |
+| `hr-fiskal-vat-system` | Whether the supplier is in the VAT system (`USustPdv`): `Y` (the default) or `N`. A small taxpayer, exempt from VAT under Art. 90(1) of the VAT Act, is outside it: its lines use the VAT key `exempt`, and the addon adds a note citing the exemption, as Art. 79(3) requires. |
 
 The invoice code is the bare sequential number (`BrOznRac`): digits with no
 leading zero. A printed invoice shows the number as

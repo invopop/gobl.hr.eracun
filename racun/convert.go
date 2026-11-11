@@ -99,7 +99,7 @@ func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice,
 	if ext.Get(fiskal.ExtKeySequenceScope) == fiskal.SequenceDevice {
 		r.SequenceScope = SequenceDevice
 	}
-	r.InVATSystem = ext.Get(fiskal.ExtKeyVATSystem) != fiskal.VATSystemOut
+	r.InVATSystem = inv.Supplier.Ext.Get(fiskal.ExtKeyVATSystem) != fiskal.VATSystemOut
 	if err := addTaxes(r, inv); err != nil {
 		return nil, err
 	}

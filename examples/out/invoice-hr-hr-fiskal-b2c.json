@@ -4,7 +4,7 @@
 		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
 		"dig": {
 			"alg": "sha256",
-			"val": "ca3c4b23c0297c68ca4b7a456391b97e1c0686a7caf52aca03c911ab8684a43e"
+			"val": "fd241745abfc380b6d62d9908932f340a2e3d0cae36ac97874ceaa70365bce62"
 		}
 	},
 	"doc": {
@@ -25,8 +25,7 @@
 			"ext": {
 				"hr-fiskal-device": "1",
 				"hr-fiskal-premises": "POS1",
-				"hr-fiskal-sequence-scope": "P",
-				"hr-fiskal-vat-system": "Y"
+				"hr-fiskal-sequence-scope": "P"
 			}
 		},
 		"supplier": {
@@ -49,7 +48,10 @@
 						}
 					]
 				}
-			]
+			],
+			"ext": {
+				"hr-fiskal-vat-system": "Y"
+			}
 		},
 		"lines": [
 			{

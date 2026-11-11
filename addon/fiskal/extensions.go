@@ -6,7 +6,8 @@ import (
 	"github.com/invopop/gobl/pkg/here"
 )
 
-// Extension keys, all set on the invoice tax (bill/tax).
+// Extension keys. All are set on the invoice tax (bill/tax), except
+// ExtKeyVATSystem, which is set on the supplier party (org/party).
 //
 // TODO: declare each extension's usage (cbc.Usage), as gobl.fr.ctc does, once
 // the hr regime branch is rebased on a GOBL release that has it.
@@ -24,7 +25,8 @@ const (
 	ExtKeySequenceScope cbc.Key = "hr-fiskal-sequence-scope"
 
 	// ExtKeyVATSystem says whether the issuer is in the VAT system
-	// (USustPdv).
+	// (USustPdv). It is a status of the supplier, so it goes in the
+	// supplier's extensions, as Italy's it-sdi-fiscal-regime does.
 	ExtKeyVATSystem cbc.Key = "hr-fiskal-vat-system"
 
 	// ExtKeyPaperNumber is the number of an invoice from the bound paper
@@ -109,8 +111,13 @@ var extensions = []*cbc.Definition{
 		},
 		Desc: i18n.String{
 			i18n.EN: here.Doc(`
-				Whether the issuer is in the VAT system (USustPdv): Y, the default,
-				or N. An issuer outside the VAT system charges no VAT.
+				Whether the supplier is in the VAT system (USustPdv): Y, the default,
+				or N. Set it on the supplier. A small taxpayer (mali porezni
+				obveznik), with a domestic turnover up to EUR 60,000, is exempt from
+				VAT under Art. 90(1) of the VAT Act and outside the VAT system: it
+				must not show VAT on its invoices (Art. 90.g). Its lines use the VAT
+				key exempt, and the invoice gets a note citing the exemption
+				(Art. 79(3)).
 			`),
 		},
 		Values: []*cbc.Definition{

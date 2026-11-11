@@ -249,14 +249,33 @@ func TestAddonExtensions(t *testing.T) {
 	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
 	inv.Tax.Ext = inv.Tax.Ext.
 		Set(fiskal.ExtKeySequenceScope, fiskal.SequenceDevice).
-		Set(fiskal.ExtKeyVATSystem, fiskal.VATSystemOut).
 		Set(fiskal.ExtKeyPaperNumber, "123/458/5")
+	inv.Supplier.Ext = inv.Supplier.Ext.Set(fiskal.ExtKeyVATSystem, fiskal.VATSystemOut)
 	r, err := FromInvoice(inv, testOptions(), key)
 	require.NoError(t, err)
 	assert.Equal(t, SequenceDevice, r.SequenceScope)
 	assert.False(t, r.InVATSystem)
 	assert.Equal(t, "123/458/5", r.HandwrittenNumber)
 	assert.True(t, r.LateDelivery, "an invoice from the paper book is always late")
+}
+
+// A small taxpayer is exempt from VAT (Art. 90(1) of the VAT Act), so its
+// sales are reported as the exempt amount, with no VAT breakdown. The amount
+// has cents, which the exempt total once rounded away.
+func TestSmallTaxpayer(t *testing.T) {
+	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+	inv.Supplier.Ext = inv.Supplier.Ext.Set(fiskal.ExtKeyVATSystem, fiskal.VATSystemOut)
+	inv.Tax.PricesInclude = ""
+	for _, l := range inv.Lines {
+		l.Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
+	}
+	require.NoError(t, inv.Calculate())
+	r, err := FromInvoice(inv, testOptions(), testKey(t))
+	require.NoError(t, err)
+	assert.False(t, r.InVATSystem)
+	assert.Empty(t, r.VAT)
+	assert.Equal(t, "10.65", r.VATExemptAmount)
+	assert.Equal(t, "10.65", r.Total)
 }
 
 func TestLateDelivery(t *testing.T) {

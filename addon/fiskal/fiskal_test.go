@@ -82,19 +82,49 @@ func TestInvoiceValid(t *testing.T) {
 	require.NoError(t, inv.Calculate())
 	require.NoError(t, rules.Validate(inv))
 	assert.Equal(t, fiskal.SequencePremises, inv.Tax.Ext.Get(fiskal.ExtKeySequenceScope))
-	assert.Equal(t, fiskal.VATSystemIn, inv.Tax.Ext.Get(fiskal.ExtKeyVATSystem))
+	assert.Equal(t, fiskal.VATSystemIn, inv.Supplier.Ext.Get(fiskal.ExtKeyVATSystem))
+	assert.Empty(t, inv.Tax.Notes)
 }
 
 func TestNormalizeKeepsExtensions(t *testing.T) {
 	inv := testInvoice()
-	inv.Tax.Ext = inv.Tax.Ext.
-		Set(fiskal.ExtKeySequenceScope, fiskal.SequenceDevice).
-		Set(fiskal.ExtKeyVATSystem, fiskal.VATSystemOut)
-	inv.Lines[0].Taxes[0] = &tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}
+	inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeySequenceScope, fiskal.SequenceDevice)
 	require.NoError(t, inv.Calculate())
 	require.NoError(t, rules.Validate(inv))
 	assert.Equal(t, fiskal.SequenceDevice, inv.Tax.Ext.Get(fiskal.ExtKeySequenceScope))
-	assert.Equal(t, fiskal.VATSystemOut, inv.Tax.Ext.Get(fiskal.ExtKeyVATSystem))
+}
+
+// smallTaxpayer is testInvoice from a supplier outside the VAT system, with
+// its line exempt.
+func smallTaxpayer() *bill.Invoice {
+	inv := testInvoice()
+	inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{fiskal.ExtKeyVATSystem: fiskal.VATSystemOut})
+	inv.Lines[0].Taxes[0] = &tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExempt}
+	return inv
+}
+
+func TestSmallTaxpayer(t *testing.T) {
+	t.Run("an exempt line, with the note", func(t *testing.T) {
+		inv := smallTaxpayer()
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+		assert.Equal(t, fiskal.VATSystemOut, inv.Supplier.Ext.Get(fiskal.ExtKeyVATSystem))
+		require.Len(t, inv.Tax.Notes, 1)
+		assert.Equal(t, tax.KeyExempt, inv.Tax.Notes[0].Key)
+		assert.Equal(t, fiskal.NoteSmallTaxpayer, inv.Tax.Notes[0].Text)
+	})
+	t.Run("an exempt note of its own", func(t *testing.T) {
+		inv := smallTaxpayer()
+		inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Oslobođeno PDV-a"}}
+		require.NoError(t, inv.Calculate())
+		require.Len(t, inv.Tax.Notes, 1)
+		assert.Equal(t, "Oslobođeno PDV-a", inv.Tax.Notes[0].Text)
+	})
+	t.Run("a line with VAT", func(t *testing.T) {
+		inv := smallTaxpayer()
+		inv.Lines[0].Taxes[0] = &tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateGeneral}
+		assertFault(t, inv, faultCode("16"))
+	})
 }
 
 func TestNormalizeIssueTime(t *testing.T) {
@@ -131,7 +161,9 @@ func TestInvoiceRules(t *testing.T) {
 		{"device with letters", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeyDevice, "T1") }, "07"},
 		{"device with a leading zero", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeyDevice, "01") }, "07"},
 		{"unknown sequence scope", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeySequenceScope, "X") }, "08"},
-		{"unknown VAT system", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeyVATSystem, "X") }, "09"},
+		{"unknown VAT system", func(inv *bill.Invoice) {
+			inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{fiskal.ExtKeyVATSystem: "X"})
+		}, "09"},
 		{"foreign supplier", func(inv *bill.Invoice) {
 			inv.Supplier.TaxID = &tax.Identity{Country: "SI", Code: "92950663"}
 		}, "12"},
@@ -142,7 +174,7 @@ func TestInvoiceRules(t *testing.T) {
 		}, "14"},
 		{"operator without an OIB", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "15"},
 		{"VAT outside the VAT system", func(inv *bill.Invoice) {
-			inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeyVATSystem, fiskal.VATSystemOut)
+			inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{fiskal.ExtKeyVATSystem: fiskal.VATSystemOut})
 		}, "16"},
 	}
 	for _, tt := range tests {

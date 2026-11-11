@@ -1,0 +1,132 @@
+{
+	"$schema": "https://gobl.org/draft-0/envelope",
+	"head": {
+		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
+		"dig": {
+			"alg": "sha256",
+			"val": "6c51e7e5fd460a958e924497e0678ba0533035801f1e2b0057c2b06d0a849d7b"
+		}
+	},
+	"doc": {
+		"$schema": "https://gobl.org/draft-0/bill/invoice",
+		"$regime": "HR",
+		"$addons": [
+			"hr-fiskal-b2c-v1"
+		],
+		"uuid": "019a5a3e-6c1e-7d4a-9b8e-2f4c6a8d0e13",
+		"type": "standard",
+		"series": "POS1",
+		"code": "1002",
+		"issue_date": "2026-11-06",
+		"issue_time": "13:58:10",
+		"currency": "EUR",
+		"tax": {
+			"ext": {
+				"hr-fiskal-device": "1",
+				"hr-fiskal-premises": "POS1",
+				"hr-fiskal-sequence-scope": "P"
+			},
+			"notes": [
+				{
+					"cat": "VAT",
+					"key": "exempt",
+					"text": "Oslobođeno PDV-a temeljem čl. 90. st. 1. Zakona o porezu na dodanu vrijednost"
+				}
+			]
+		},
+		"supplier": {
+			"name": "Obrt Kava",
+			"tax_id": {
+				"country": "HR",
+				"code": "80432461483"
+			},
+			"people": [
+				{
+					"key": "operator",
+					"name": {
+						"given": "Ivan",
+						"surname": "Horvat"
+					},
+					"identities": [
+						{
+							"type": "OIB",
+							"code": "80432461483"
+						}
+					]
+				}
+			],
+			"ext": {
+				"hr-fiskal-vat-system": "N"
+			}
+		},
+		"lines": [
+			{
+				"i": 1,
+				"quantity": "2",
+				"item": {
+					"name": "Kava",
+					"price": "2.50"
+				},
+				"sum": "5.00",
+				"taxes": [
+					{
+						"cat": "VAT",
+						"key": "exempt"
+					}
+				],
+				"total": "5.00"
+			},
+			{
+				"i": 2,
+				"quantity": "1",
+				"item": {
+					"name": "Sendvič",
+					"price": "5.65"
+				},
+				"sum": "5.65",
+				"taxes": [
+					{
+						"cat": "VAT",
+						"key": "exempt"
+					}
+				],
+				"total": "5.65"
+			}
+		],
+		"payment": {
+			"advances": [
+				{
+					"key": "cash",
+					"description": "Gotovina",
+					"percent": "100%",
+					"amount": "10.65"
+				}
+			]
+		},
+		"totals": {
+			"sum": "10.65",
+			"total": "10.65",
+			"taxes": {
+				"categories": [
+					{
+						"code": "VAT",
+						"rates": [
+							{
+								"key": "exempt",
+								"base": "10.65",
+								"amount": "0.00"
+							}
+						],
+						"amount": "0.00"
+					}
+				],
+				"sum": "0.00"
+			},
+			"tax": "0.00",
+			"total_with_tax": "10.65",
+			"payable": "10.65",
+			"advance": "10.65",
+			"due": "0.00"
+		}
+	}
+}

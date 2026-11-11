@@ -35,8 +35,8 @@ func normalizeInvoice(inv *bill.Invoice) {
 	if !inv.Tax.Ext.Has(ExtKeySequenceScope) {
 		inv.Tax.Ext = inv.Tax.Ext.Set(ExtKeySequenceScope, SequencePremises)
 	}
-	if !inv.Tax.Ext.Has(ExtKeyVATSystem) {
-		inv.Tax.Ext = inv.Tax.Ext.Set(ExtKeyVATSystem, VATSystemIn)
+	if inv.Supplier != nil && !inv.Supplier.Ext.Has(ExtKeyVATSystem) {
+		inv.Supplier.Ext = inv.Supplier.Ext.Set(ExtKeyVATSystem, VATSystemIn)
 	}
 	if inv.Series == cbc.CodeEmpty {
 		inv.Series = Series(inv.Tax.Ext)
@@ -121,15 +121,17 @@ func billInvoiceRules() *rules.Set {
 				rules.Assert("08", fmt.Sprintf("invoice tax ext %s must be P or N (OznSlijed)", ExtKeySequenceScope),
 					tax.ExtensionHasValidCode(ExtKeySequenceScope),
 				),
-				rules.Assert("09", fmt.Sprintf("invoice tax ext %s must be Y or N (USustPdv)", ExtKeyVATSystem),
-					tax.ExtensionHasValidCode(ExtKeyVATSystem),
-				),
 				rules.Assert("10", fmt.Sprintf("invoice tax ext %s must be up to 100 characters (ParagonBrRac)", ExtKeyPaperNumber),
 					tax.ExtensionHasValidCode(ExtKeyPaperNumber),
 				),
 			),
 		),
 		rules.Field("supplier",
+			rules.Field("ext",
+				rules.Assert("09", fmt.Sprintf("invoice supplier ext %s must be Y or N (USustPdv)", ExtKeyVATSystem),
+					tax.ExtensionHasValidCode(ExtKeyVATSystem),
+				),
+			),
 			rules.Field("tax_id",
 				rules.Assert("11", "invoice supplier tax ID is required: the issuer's OIB (Oib)", is.Present),
 				rules.Field("country",
@@ -156,7 +158,7 @@ func billInvoiceRules() *rules.Set {
 		),
 		rules.When(is.Func("outside the VAT system", outsideVATSystem),
 			rules.Field("totals",
-				rules.Assert("16", fmt.Sprintf("invoice from an issuer outside the VAT system (%s %s) must not charge VAT (USustPdv)", ExtKeyVATSystem, VATSystemOut),
+				rules.Assert("16", fmt.Sprintf("invoice from a supplier outside the VAT system (%s %s) must not charge VAT: use the VAT key exempt (Art. 90.g of the VAT Act)", ExtKeyVATSystem, VATSystemOut),
 					is.Func("charges no VAT", totalsChargeNoVAT),
 				),
 			),
@@ -191,7 +193,7 @@ func seriesMatchesScope(val any) bool {
 
 func outsideVATSystem(val any) bool {
 	inv, ok := val.(*bill.Invoice)
-	return ok && inv != nil && inv.Tax != nil && inv.Tax.Ext.Get(ExtKeyVATSystem) == VATSystemOut
+	return ok && inv != nil && inv.Supplier != nil && inv.Supplier.Ext.Get(ExtKeyVATSystem) == VATSystemOut
 }
 
 // totalsChargeNoVAT is true when no VAT rate in the totals has a percentage

@@ -78,8 +78,10 @@ func newAddon() *tax.AddonDef {
 				self-service device. It is the same convention as the hr-eracun-v1
 				addon.
 
-				An issuer outside the VAT system sets hr-fiskal-vat-system to N, and
-				then must not charge VAT. An invoice from the bound paper invoice
+				A supplier outside the VAT system, such as a small taxpayer under
+				Art. 90(1) of the VAT Act, sets hr-fiskal-vat-system to N in its own
+				extensions. It must not charge VAT: its lines use the VAT key exempt,
+				and the invoice gets a note citing the exemption. An invoice from the bound paper invoice
 				book, entered after the till broke down, carries its paper number in
 				hr-fiskal-paper-number.
 
@@ -108,5 +110,6 @@ func newAddon() *tax.AddonDef {
 			},
 		},
 		Extensions: extensions,
+		Scenarios:  []*tax.ScenarioSet{invoiceScenarios},
 	}
 }
