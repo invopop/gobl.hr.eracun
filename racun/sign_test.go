@@ -65,7 +65,7 @@ func TestSign(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("needs a certificate, a request and an Id", func(t *testing.T) {
+	t.Run("needs a certificate, a request, an Id and an invoice", func(t *testing.T) {
 		_, err := Sign(nil, testRequest())
 		assert.EqualError(t, err, "no certificate")
 		_, err = Sign(cert, nil)
@@ -74,6 +74,8 @@ func TestSign(t *testing.T) {
 		req.ID = ""
 		_, err = Sign(cert, req)
 		assert.EqualError(t, err, "the request has no Id to reference")
+		_, err = Sign(cert, NewRequest(nil))
+		assert.EqualError(t, err, "the request has no invoice")
 	})
 
 	t.Run("needs a header with a message ID and a time", func(t *testing.T) {

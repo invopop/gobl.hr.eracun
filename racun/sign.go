@@ -16,9 +16,9 @@ import (
 // KeyInfo. It returns the signed request, ready for a SOAP body.
 //
 // The certificate must have an RSA key that belongs to it, and be valid
-// now. The request must have its Id and a header with a message ID and the
-// time it is sent: the schema requires them, and Client.Fiscalize ties the
-// answer to the request by the message ID.
+// now. The request must have its Id, an invoice, and a header with a message
+// ID and the time it is sent: the schema requires them, and
+// Client.Fiscalize ties the answer to the request by the message ID.
 func Sign(cert *Certificate, req *InvoiceRequest) ([]byte, error) {
 	if err := cert.check(time.Now()); err != nil {
 		return nil, err
@@ -31,6 +31,9 @@ func Sign(cert *Certificate, req *InvoiceRequest) ([]byte, error) {
 	}
 	if req.Header == nil || req.Header.MessageID == "" || req.Header.SentAt == "" {
 		return nil, errors.New("the request needs a header with a message ID and the time it is sent")
+	}
+	if req.Invoice == nil {
+		return nil, errors.New("the request has no invoice")
 	}
 	data, err := xml.Marshal(req)
 	if err != nil {
