@@ -87,6 +87,11 @@ func newAddon() *tax.AddonDef {
 				book, entered after the till broke down, carries its paper number in
 				hr-fiskal-paper-number.
 
+				CIS receives the amounts in euros. An invoice in another currency
+				must give an exchange rate to EUR, and is converted with it when
+				it is fiscalized. Its printed invoice must also show the amounts
+				in euros (Art. 81 of the VAT Act).
+
 				An invoice with no issue time, dated today or not dated at all, is
 				given the current date and time in Croatia. Fiscalization needs the
 				issue time, as it goes into the ZKI (the issuer's protection code).

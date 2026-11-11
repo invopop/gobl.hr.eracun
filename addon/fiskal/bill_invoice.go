@@ -103,8 +103,11 @@ func billInvoiceRules() *rules.Set {
 		rules.Field("issue_time",
 			rules.Assert("02", "invoice issue time is required for an invoice not dated today in Croatia (DatVrijeme)", is.Present),
 		),
-		rules.Field("currency",
-			rules.Assert("03", "invoice currency must be EUR", is.In(currency.EUR)),
+		// CIS receives the amounts in euros (spec v2.7, p. 10), but the VAT Act
+		// (Art. 81) lets an invoice show them in another currency too. The
+		// racun conversion converts the invoice with its exchange rate.
+		rules.Assert("03", "invoice must be in EUR or provide an exchange rate to EUR: CIS receives the amounts in euros",
+			currency.CanConvertTo(currency.EUR),
 		),
 		rules.Field("tax",
 			rules.Assert("04", "invoice tax is required", is.Present),

@@ -7,7 +7,8 @@
 // business premises and device labels, the numbering scope, the VAT system,
 // the VAT breakdown, the total, the payment method, the operator's OIB, the
 // paper invoice number and the buyer's OIB from the invoice. Only whether
-// the Invoice is sent late comes from Options.
+// the Invoice is sent late comes from Options. An invoice in another
+// currency is converted to euros first, with its exchange rate.
 
 package racun
 
@@ -81,8 +82,11 @@ func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice,
 	if err := checkInvoice(inv); err != nil {
 		return nil, err
 	}
+	inv, err := inEuros(inv)
+	if err != nil {
+		return nil, err
+	}
 
-	var err error
 	if r.IssuerOIB, err = issuerOIB(inv); err != nil {
 		return nil, err
 	}
@@ -141,8 +145,6 @@ func checkInvoice(inv *bill.Invoice) error {
 		return fmt.Errorf("totals %w: calculate the invoice first", ErrMissing)
 	case inv.Type != bill.InvoiceTypeStandard:
 		return fmt.Errorf("invoice type %q %w", inv.Type, ErrUnsupported)
-	case inv.Currency != currency.EUR:
-		return fmt.Errorf("currency %q %w: fiscalized invoices are in euros", inv.Currency, ErrInvalid)
 	case inv.Totals.Payable.IsNegative():
 		return fmt.Errorf("negative total %w", ErrUnsupported)
 	case inv.Totals.Rounding != nil && !inv.Totals.Rounding.IsZero():
@@ -165,6 +167,27 @@ func checkInvoice(inv *bill.Invoice) error {
 		}
 	}
 	return nil
+}
+
+// inEuros provides the invoice with its amounts in euros, which CIS
+// receives (spec v2.7, p. 10). An invoice in another currency is converted
+// with its exchange rate to EUR: GOBL converts the line prices, charges and
+// discounts, and then calculates the totals again. The euro amounts printed
+// on the invoice (Art. 81 of the VAT Act) must come from this conversion, as
+// the ZKI and the QR code do.
+func inEuros(inv *bill.Invoice) (*bill.Invoice, error) {
+	if inv.Currency == currency.EUR {
+		return inv, nil
+	}
+	// ConvertInto calculates its receiver again, so it gets a copy. The
+	// invoice is calculated already, so the copy's shared parts do not
+	// change.
+	c := *inv
+	eur, err := c.ConvertInto(currency.EUR)
+	if err != nil {
+		return nil, fmt.Errorf("currency %q %w: CIS receives euros: %s", inv.Currency, ErrInvalid, err)
+	}
+	return eur, nil
 }
 
 func issuerOIB(inv *bill.Invoice) (string, error) {

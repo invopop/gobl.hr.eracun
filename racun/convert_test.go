@@ -21,8 +21,10 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
 	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/pay"
+	"github.com/invopop/gobl/rules"
 	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -293,6 +295,25 @@ func TestExemptAndOutsideScope(t *testing.T) {
 	assert.Equal(t, "10.65", r.Total)
 }
 
+// TestAnotherCurrency checks that an invoice in another currency is sent to
+// CIS in euros, converted with its exchange rate, and that the caller's
+// invoice keeps its currency.
+func TestAnotherCurrency(t *testing.T) {
+	inv := loadExample(t, "business-buyer-card.json").Extract().(*bill.Invoice)
+	inv.Currency = "USD"
+	inv.ExchangeRates = []*currency.ExchangeRate{{From: "USD", To: "EUR", Amount: num.MakeAmount(875, 3)}}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+
+	r, err := FromInvoice(inv, testOptions(), testKey(t))
+	require.NoError(t, err)
+	// USD 100.00 at 0.875 is EUR 87.50; 5 % VAT on it is EUR 4.38.
+	assert.Equal(t, []*Tax{{Rate: "5.00", Base: "87.50", Amount: "4.38"}}, r.VAT)
+	assert.Equal(t, "91.88", r.Total)
+	assert.Equal(t, currency.Code("USD"), inv.Currency)
+	assert.Equal(t, "105.00", inv.Totals.Payable.String())
+}
+
 func TestLateDelivery(t *testing.T) {
 	r, err := NewInvoice(loadExample(t, "cash-prices-include-vat.json"), &Options{LateDelivery: true}, testKey(t))
 	require.NoError(t, err)
@@ -322,7 +343,7 @@ func TestErrors(t *testing.T) {
 		{name: "no addon", inv: func(i *bill.Invoice) { i.Addons = tax.Addons{} }, err: ErrMissing, msg: "hr-fiskal-b2c-v1"},
 		{name: "a foreign supplier", inv: func(i *bill.Invoice) { i.Supplier.TaxID.Country = "SI" }, err: ErrInvalid, msg: "the issuer must be Croatian"},
 		{name: "a credit note", inv: func(i *bill.Invoice) { i.Type = bill.InvoiceTypeCreditNote }, err: ErrUnsupported, msg: "credit-note"},
-		{name: "another currency", inv: func(i *bill.Invoice) { i.Currency = "USD" }, err: ErrInvalid, msg: "euros"},
+		{name: "another currency without an exchange rate", inv: func(i *bill.Invoice) { i.Currency = "USD" }, err: ErrInvalid, msg: "CIS receives euros"},
 		{name: "not calculated", inv: func(i *bill.Invoice) { i.Totals = nil }, err: ErrMissing, msg: "calculate"},
 		{name: "no premises", inv: func(i *bill.Invoice) { i.Tax.Ext = i.Tax.Ext.Delete(fiskal.ExtKeyPremises) }, err: ErrMissing, msg: "premises"},
 		{name: "no device", inv: func(i *bill.Invoice) { i.Tax.Ext = i.Tax.Ext.Delete(fiskal.ExtKeyDevice) }, err: ErrMissing, msg: "device"},
