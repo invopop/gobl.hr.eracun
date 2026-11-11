@@ -41,6 +41,7 @@ func init() {
 	)
 	norm.RegisterWithGuard(is.InContext(tax.AddonIn(V1)),
 		norm.For(normalizeInvoice),
+		norm.For(normalizeTaxCombo),
 	)
 }
 

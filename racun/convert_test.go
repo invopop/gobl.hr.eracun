@@ -278,6 +278,21 @@ func TestSmallTaxpayer(t *testing.T) {
 	assert.Equal(t, "10.65", r.Total)
 }
 
+// An exempt line and an outside-scope line are reported apart, each with
+// its cents.
+func TestExemptAndOutsideScope(t *testing.T) {
+	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+	inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
+	inv.Lines[1].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+	require.NoError(t, inv.Calculate())
+	r, err := FromInvoice(inv, testOptions(), testKey(t))
+	require.NoError(t, err)
+	assert.Empty(t, r.VAT)
+	assert.Equal(t, "5.00", r.VATExemptAmount)
+	assert.Equal(t, "5.65", r.NotSubjectAmount)
+	assert.Equal(t, "10.65", r.Total)
+}
+
 func TestLateDelivery(t *testing.T) {
 	r, err := NewInvoice(loadExample(t, "cash-prices-include-vat.json"), &Options{LateDelivery: true}, testKey(t))
 	require.NoError(t, err)
