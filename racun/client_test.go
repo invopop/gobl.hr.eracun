@@ -355,8 +355,8 @@ func TestSendInvoice(t *testing.T) {
 		require.NoError(t, err)
 		addr := l.Addr().String()
 		require.NoError(t, l.Close())
-		c, err := newClient(&Config{Certificate: testCertificate(t)}, "https://"+addr+"/", ca.Demo())
-		require.NoError(t, err)
+		c := recordedClient(t)
+		c.url = "https://" + addr + "/"
 		_, err = c.SendInvoice(context.Background(), envelop([]byte("<x/>")))
 		require.ErrorIs(t, err, ErrConnection)
 		var e *Error
@@ -386,21 +386,15 @@ func TestSendInvoice(t *testing.T) {
 	})
 }
 
-// serverClient starts a TLS server with handler and returns a sandbox
-// client that calls it, trusting its certificate and FINA's demo chain,
-// with certificates checked when the accepted cassette was recorded.
+// serverClient starts a TLS server with handler and returns a recorded
+// client that calls it, trusting its certificate as well as FINA's demo
+// chain. The TLS configuration and the answer check share the pool.
 func serverClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
-	roots := ca.Demo()
-	roots.AddCert(srv.Certificate())
-	c, err := newClient(&Config{
-		Environment: EnvironmentSandbox,
-		Certificate: testCertificate(t),
-	}, srv.URL, roots)
-	require.NoError(t, err)
-	sentAt := acceptedCassette(t).SentAt
-	c.now = func() time.Time { return sentAt }
+	c := recordedClient(t)
+	c.url = srv.URL
+	c.roots.AddCert(srv.Certificate())
 	return c
 }

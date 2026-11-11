@@ -93,15 +93,11 @@ func New(conf *Config) (*Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown CIS environment %q", conf.Environment)
 	}
-	return newClient(conf, endpoint, chains[conf.Environment]())
-}
-
-// newClient prepares a client that calls endpoint and trusts roots. Tests
-// use it directly to call a local server.
-func newClient(conf *Config, endpoint string, roots *x509.CertPool) (*Client, error) {
 	if conf.Certificate == nil || conf.Certificate.Cert == nil || conf.Certificate.Key == nil {
 		return nil, errors.New("a signing certificate is required")
 	}
+	// The TLS configuration and the answer check share one pool.
+	roots := chains[conf.Environment]()
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
 	return &Client{
