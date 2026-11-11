@@ -181,9 +181,12 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
+		// CIS receives only the total from an issuer outside the VAT system,
+		// so VAT charged on its invoice would not be reported. Such an issuer
+		// must not show VAT anyway (Art. 90.g of the VAT Act).
 		rules.When(is.Func("outside the VAT system", outsideVATSystem),
 			rules.Field("totals",
-				rules.Assert("16", fmt.Sprintf("invoice from a supplier outside the VAT system (%s %s) must not charge VAT: use the VAT key exempt (Art. 90.g of the VAT Act)", ExtKeyVATSystem, VATSystemOut),
+				rules.Assert("16", fmt.Sprintf("invoice from a supplier outside the VAT system (%s %s) must not charge VAT: CIS receives only its total (Art. 90.g of the VAT Act)", ExtKeyVATSystem, VATSystemOut),
 					is.Func("charges no VAT", totalsChargeNoVAT),
 				),
 			),
