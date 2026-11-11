@@ -73,7 +73,9 @@ func newAddon() *tax.AddonDef {
 				label for scope P, such as "POS1", or the premises and device labels
 				for scope N, such as "POS1/1". A counter that runs per series then
 				numbers each premises, or each device, on its own. A series that does
-				not match the labels is refused.
+				not match the labels is refused. Leading zeros are removed from a
+				code made only of digits, such as a padded "000042", as CIS refuses
+				them.
 
 				The operator is the supplier person with the "operator" key, with an
 				OIB identity: the person at the till, or the supplier for a

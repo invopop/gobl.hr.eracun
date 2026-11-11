@@ -155,7 +155,8 @@ func TestInvoiceRules(t *testing.T) {
 		code string
 	}{
 		{"code with a series letter", func(inv *bill.Invoice) { inv.Code = "A1" }, "01"},
-		{"code with a leading zero", func(inv *bill.Invoice) { inv.Code = "0101" }, "01"},
+		{"code with only zeros", func(inv *bill.Invoice) { inv.Code = "000" }, "01"},
+		{"padded code with a series letter", func(inv *bill.Invoice) { inv.Code = "A0001" }, "01"},
 		{"no premises", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Delete(fiskal.ExtKeyPremises) }, "05"},
 		{"no device", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Delete(fiskal.ExtKeyDevice) }, "05"},
 		{"premises with a dash", func(inv *bill.Invoice) { inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeyPremises, "POS-1") }, "06"},
@@ -244,6 +245,13 @@ func TestNumbering(t *testing.T) {
 		inv.Series = "POS1"
 		require.NoError(t, inv.Calculate())
 		require.NoError(t, rules.Validate(inv))
+	})
+	t.Run("a code padded by the sequence step", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Code = "000042"
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+		assert.Equal(t, cbc.Code("42"), inv.Code)
 	})
 	t.Run("a series of another premises", func(t *testing.T) {
 		inv := testInvoice()

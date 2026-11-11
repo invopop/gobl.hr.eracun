@@ -124,7 +124,10 @@ The number can come from two places:
   sequence step of the workflow gives it one. That step keeps one counter for
   each supplier and series, so the addon sets the series from the labels: the
   premises label for scope `P` (`POS1`), or `<premises>/<device>` for scope `N`
-  (`POS1/1`). The step must use padding 0, as CIS refuses leading zeros.
+  (`POS1/1`). CIS refuses leading zeros, so the addon removes them from a
+  code made only of digits: the step's default padding of six digits gives
+  `000042`, which becomes `42`. The step must not add a prefix or a suffix,
+  and must count per series (not use one fixed sequence for every premises).
 
 The rules refuse a series that does not match the labels, so that a counter
 never numbers two premises or two devices.

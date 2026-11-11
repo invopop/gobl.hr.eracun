@@ -3,6 +3,7 @@ package fiskal
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
@@ -29,6 +30,7 @@ func normalizeInvoice(inv *bill.Invoice) {
 		return
 	}
 	normalizeIssueTime(inv)
+	inv.Code = normalizeCode(inv.Code)
 	if inv.Tax == nil {
 		inv.Tax = new(bill.Tax)
 	}
@@ -41,6 +43,26 @@ func normalizeInvoice(inv *bill.Invoice) {
 	if inv.Series == cbc.CodeEmpty {
 		inv.Series = Series(inv.Tax.Ext)
 	}
+}
+
+// normalizeCode removes the leading zeros of a code made only of digits,
+// so "000042" becomes "42". CIS refuses leading zeros in the sequential
+// number (BrOznRac), and Invopop's sequence step pads its numbers to six
+// digits unless set otherwise. The invoice is numbered before it is
+// validated, so a padded code would use up a number that is never issued.
+// A code with other characters, or with only zeros, is left for rule 01
+// to refuse.
+func normalizeCode(code cbc.Code) cbc.Code {
+	s := code.String()
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return code
+		}
+	}
+	if t := strings.TrimLeft(s, "0"); t != "" {
+		return cbc.Code(t)
+	}
+	return code
 }
 
 // Series provides the invoice series that matches the numbering scope: the
