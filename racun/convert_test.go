@@ -288,8 +288,32 @@ func TestSmallTaxpayer(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, r.InVATSystem)
 	assert.Empty(t, r.VAT)
-	assert.Equal(t, "10.65", r.VATExemptAmount)
+	assert.Empty(t, r.VATExemptAmount)
+	assert.Empty(t, r.NotSubjectAmount)
 	assert.Equal(t, "10.65", r.Total)
+}
+
+// A small taxpayer's invoice has only its total, whichever VAT key its
+// lines use: CIS gets no breakdown from an issuer outside the VAT system.
+func TestSmallTaxpayerSendsOnlyTheTotal(t *testing.T) {
+	for _, key := range []cbc.Key{tax.KeyExempt, tax.KeyOutsideScope, tax.KeyZero} {
+		t.Run(key.String(), func(t *testing.T) {
+			inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+			inv.Supplier.Ext = inv.Supplier.Ext.Set(fiskal.ExtKeyVATSystem, fiskal.VATSystemOut)
+			inv.Tax.PricesInclude = ""
+			for _, l := range inv.Lines {
+				l.Taxes = tax.Set{{Category: tax.CategoryVAT, Key: key}}
+			}
+			require.NoError(t, inv.Calculate())
+			require.NoError(t, rules.Validate(inv))
+			r, err := FromInvoice(inv, testOptions(), testKey(t))
+			require.NoError(t, err)
+			assert.Empty(t, r.VAT)
+			assert.Empty(t, r.VATExemptAmount)
+			assert.Empty(t, r.NotSubjectAmount)
+			assert.Equal(t, "10.65", r.Total)
+		})
+	}
 }
 
 // An exempt line and an outside-scope line are reported apart, each with

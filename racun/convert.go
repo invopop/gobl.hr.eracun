@@ -107,6 +107,9 @@ func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice,
 	if err := addTaxes(r, inv); err != nil {
 		return nil, err
 	}
+	if !r.InVATSystem {
+		dropVATBreakdown(r)
+	}
 	r.Total = amount(inv.Totals.Payable)
 	r.PaymentMethod = paymentMethod(inv.Payment)
 	if r.OperatorOIB, err = operatorOIB(inv); err != nil {
@@ -304,6 +307,24 @@ func addTaxes(r *Invoice, inv *bill.Invoice) error {
 		r.NotSubjectAmount = amount(outside)
 	}
 	return nil
+}
+
+// dropVATBreakdown leaves out the VAT breakdown of an issuer outside the VAT
+// system, such as a small taxpayer: the VAT entries (Pdv), the exempt
+// amount (IznosOslobPdv) and the amount not subject to tax
+// (IznosNePodlOpor). The Invoice then has only its total.
+//
+// No source says which of these fields holds a small taxpayer's sales, so
+// the Invoice makes no claim about it. CIS checks the breakdown against the
+// total only for an issuer in the VAT system (checks v160, v161 and v166,
+// spec v2.7, p. 212), and the spec's examples with USustPdv false carry no
+// breakdown. Till software does the same: "Kod obveznika koji nisu u
+// sustavu pdv-a ne smije biti nikakvih poreza u fiskalnoj XML datoteci"
+// (IPOS, Fiskalizacija 1.0 help). Open question: regulations-kb#55.
+func dropVATBreakdown(r *Invoice) {
+	r.VAT = nil
+	r.VATExemptAmount = ""
+	r.NotSubjectAmount = ""
 }
 
 // amount writes an amount with two decimals, as IznosType asks.
