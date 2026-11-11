@@ -294,3 +294,35 @@ func TestTaxComboRules(t *testing.T) {
 	require.Error(t, faults)
 	assert.True(t, faults.HasCode(rules.GOBL.Add(fiskal.Namespace).Add("TAX-COMBO").Add("02")), "got %s", faults)
 }
+
+func TestVATPercent(t *testing.T) {
+	for _, p := range []num.Percentage{
+		num.MakePercentage(0, 2),
+		num.MakePercentage(5, 2),
+		num.MakePercentage(130, 3), // 13.0 %, as the regime writes it
+		num.MakePercentage(25, 2),
+	} {
+		t.Run("accepts "+p.String(), func(t *testing.T) {
+			inv := testInvoice()
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Percent: &p}}
+			require.NoError(t, inv.Calculate())
+			require.NoError(t, rules.Validate(inv))
+		})
+	}
+	for _, p := range []num.Percentage{num.MakePercentage(10, 2), num.MakePercentage(255, 3)} {
+		t.Run("refuses "+p.String(), func(t *testing.T) {
+			inv := testInvoice()
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Percent: &p}}
+			require.NoError(t, inv.Calculate())
+			faults := rules.Validate(inv)
+			require.Error(t, faults)
+			assert.True(t, faults.HasCode(rules.GOBL.Add(fiskal.Namespace).Add("TAX-COMBO").Add("03")), "got %s", faults)
+		})
+	}
+	t.Run("accepts an exempt line without a percent", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+	})
+}

@@ -112,6 +112,8 @@ func newAddon() *tax.AddonDef {
 				accepted: the invoice request has no element for them, and CIS
 				checks that the total is the sum of the tax breakdowns. A line
 				with no VAT to charge uses the VAT key exempt or outside-scope.
+				A VAT rate other than 0, 5, 13 or 25 % is refused too, as CIS
+				refuses it.
 			`),
 		},
 		Sources: []*cbc.Source{

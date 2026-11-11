@@ -10,6 +10,7 @@ import (
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/l10n"
+	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/regimes/hr"
 	"github.com/invopop/gobl/rules"
@@ -243,10 +244,20 @@ func billInvoiceRules() *rules.Set {
 	)
 }
 
+// allowedVATPercents are the VAT rates CIS accepts: 0, 5, 13 and 25 %
+// (error 182, spec v2.7, p. 213).
+var allowedVATPercents = []num.Percentage{
+	num.MakePercentage(0, 2),
+	num.MakePercentage(5, 2),
+	num.MakePercentage(13, 2),
+	num.MakePercentage(25, 2),
+}
+
 // taxComboRules refuse the taxes that the racun conversion does not support
-// yet, for the same reason as rules 18 to 22 of the invoice: taxes other
+// yet, for the same reason as rules 18 to 23 of the invoice: taxes other
 // than VAT (EU3-34), and reverse charge, whose report to CIS is still to
-// confirm.
+// confirm. Rule 03 refuses a VAT rate that CIS refuses (error 182), as the
+// invoice would be numbered and then never fiscalized.
 func taxComboRules() *rules.Set {
 	return rules.For(new(tax.Combo),
 		rules.Field("cat",
@@ -255,6 +266,11 @@ func taxComboRules() *rules.Set {
 		rules.Field("key",
 			rules.Assert("02", "VAT key must not be reverse-charge or intra-community: not supported yet",
 				is.Func("not reverse charge", keyNotReverseCharge),
+			),
+		),
+		rules.Field("percent",
+			rules.AssertIfPresent("03", "VAT percent must be 0, 5, 13 or 25 %: CIS refuses other rates (error 182)",
+				is.Func("allowed VAT percent", percentAllowed),
 			),
 		),
 	)
@@ -270,6 +286,19 @@ func totalsPayableNotNegative(val any) bool {
 func totalsHaveNoRounding(val any) bool {
 	t, ok := val.(*bill.Totals)
 	return !ok || t == nil || t.Rounding == nil || t.Rounding.IsZero()
+}
+
+func percentAllowed(val any) bool {
+	p, ok := val.(*num.Percentage)
+	if !ok || p == nil {
+		return true
+	}
+	for _, a := range allowedVATPercents {
+		if p.Equals(a) {
+			return true
+		}
+	}
+	return false
 }
 
 func keyNotReverseCharge(val any) bool {
