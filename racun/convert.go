@@ -15,10 +15,10 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/invopop/gobl"
 	"github.com/invopop/gobl/bill"
+	"github.com/invopop/gobl/cal"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/l10n"
@@ -41,10 +41,6 @@ var (
 	// ErrUnsupported is an invoice the conversion does not handle yet.
 	ErrUnsupported = errors.New("not supported for fiscalization yet")
 )
-
-// location is Croatian local time. GOBL dates and times are local to the
-// regime, and the Invoice is written in Croatian local time with no offset.
-var location = mustLocation("Europe/Zagreb")
 
 var (
 	// sequentialPattern is an invoice number: digits with no leading zero
@@ -116,7 +112,7 @@ func FromInvoice(inv *bill.Invoice, opts *Options, key crypto.Signer) (*Invoice,
 	if err != nil {
 		return nil, err
 	}
-	r.IssuedAt = issuedAt.Format(DateTimeFormat)
+	r.IssuedAt = formatDateTime(issuedAt, "T")
 	if r.Number, err = number(inv, opts); err != nil {
 		return nil, err
 	}
@@ -207,14 +203,17 @@ func oib(field, code string) (string, error) {
 	return code, nil
 }
 
-// issueTime is the issue date and time of the invoice in Croatian local
-// time. Fiscalization needs the time, so it must be set.
-func issueTime(inv *bill.Invoice) (time.Time, error) {
+// issueTime is the issue date and time of the invoice. GOBL dates and times
+// are local to the regime and have no zone, and so do the Invoice's, so they
+// are copied as they are: a time.Time would move a time that does not exist
+// in Croatia, such as 02:30 on the day clocks go forward. Fiscalization
+// needs the time, so it must be set.
+func issueTime(inv *bill.Invoice) (cal.DateTime, error) {
 	if inv.IssueTime == nil || inv.IssueTime.IsZero() {
-		return time.Time{}, fmt.Errorf("issue time %w", ErrMissing)
+		return cal.DateTime{}, fmt.Errorf("issue time %w", ErrMissing)
 	}
 	d, t := inv.IssueDate, inv.IssueTime
-	return time.Date(d.Year, d.Month, d.Day, t.Hour, t.Minute, t.Second, 0, location), nil
+	return cal.MakeDateTime(d.Year, d.Month, d.Day, t.Hour, t.Minute, t.Second), nil
 }
 
 // number is the invoice number: the GOBL invoice code, which must be the bare
@@ -344,12 +343,4 @@ func buyerOIB(inv *bill.Invoice) string {
 		return ""
 	}
 	return c.TaxID.Code.String()
-}
-
-func mustLocation(name string) *time.Location {
-	loc, err := time.LoadLocation(name)
-	if err != nil {
-		panic(err)
-	}
-	return loc
 }

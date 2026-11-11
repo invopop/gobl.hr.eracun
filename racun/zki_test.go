@@ -7,8 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"testing"
-	"time"
 
+	"github.com/invopop/gobl/cal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ import (
 func testZKIInput() *ZKIInput {
 	return &ZKIInput{
 		IssuerOIB: "80432461483",
-		IssuedAt:  time.Date(2026, 11, 6, 9, 5, 3, 0, zagreb),
+		IssuedAt:  cal.MakeDateTime(2026, 11, 6, 9, 5, 3),
 		Number:    &Number{Sequential: "123", Premises: testPremises, Device: "2"},
 		Total:     "1245.56",
 	}

@@ -8,15 +8,17 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"time"
+
+	"github.com/invopop/gobl/cal"
 )
 
 // ZKIInput is the invoice data the ZKI protects.
 type ZKIInput struct {
 	IssuerOIB string
-	// IssuedAt is the issue time in Croatian local time, as printed on the
-	// invoice.
-	IssuedAt time.Time
+	// IssuedAt is the issue date and time as printed on the invoice:
+	// Croatian local time, with no zone. Convert a moment, such as the
+	// till's clock, to Croatian local time before setting it.
+	IssuedAt cal.DateTime
 	Number   *Number
 	// Total is the invoice total as written in the request, such as
 	// "1245.56".
@@ -49,7 +51,7 @@ func ZKI(key crypto.Signer, in *ZKIInput) (string, error) {
 
 func zkiData(in *ZKIInput) string {
 	return in.IssuerOIB +
-		in.IssuedAt.Format(zkiDateTimeFormat) +
+		formatDateTime(in.IssuedAt, " ") +
 		in.Number.Sequential +
 		in.Number.Premises +
 		in.Number.Device +

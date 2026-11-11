@@ -24,6 +24,12 @@
 // XML-DSig, not XAdES).
 package racun
 
+import (
+	"fmt"
+
+	"github.com/invopop/gobl/cal"
+)
+
 // Namespaces of the invoice messages.
 const (
 	NamespaceF73  = "http://www.apis-it.hr/fin/2012/types/f73"
@@ -34,9 +40,13 @@ const (
 // (DatumVrijemeType): Croatian local time, with no zone offset.
 const DateTimeFormat = "02.01.2006T15:04:05"
 
-// zkiDateTimeFormat is the layout of the issue time in the ZKI input. It has
-// a space where DateTimeFormat has a T (§12).
-const zkiDateTimeFormat = "02.01.2006 15:04:05"
+// formatDateTime writes a date and time with no zone as "dd.mm.yyyy", sep,
+// "hh:mm:ss": the time is written as it is, never converted. Messages use a
+// T as sep, as in DateTimeFormat, and the ZKI input a space (§12).
+func formatDateTime(dt cal.DateTime, sep string) string {
+	d, t := dt.DateTime.Date, dt.DateTime.Time
+	return fmt.Sprintf("%02d.%02d.%04d%s%02d:%02d:%02d", d.Day, d.Month, d.Year, sep, t.Hour, t.Minute, t.Second)
+}
 
 // SequenceScope says what an invoice number counts within (OznSlijed).
 type SequenceScope string

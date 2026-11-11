@@ -20,7 +20,7 @@ func TestCISTestExamples(t *testing.T) {
 			cassette := "example-" + strings.TrimSuffix(name, ".json")
 			fiscalizeCassette(t, cassette, true, func(t *testing.T, cert *Certificate, sentAt time.Time, messageID string) *InvoiceRequest {
 				inv := loadExample(t, name).Extract().(*bill.Invoice)
-				now := sentAt.In(location)
+				now := sentAt.In(zagreb)
 				inv.Code = cbc.Code(invoiceNumber(sentAt, i))
 				inv.IssueDate = cal.DateOf(now)
 				inv.IssueTime = cal.NewTime(now.Hour(), now.Minute(), now.Second())

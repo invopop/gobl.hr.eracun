@@ -200,9 +200,30 @@ func TestZKIMatchesInvoice(t *testing.T) {
 	require.NoError(t, err)
 	zki, err := ZKI(key, &ZKIInput{
 		IssuerOIB: invopopOIB,
-		IssuedAt:  time.Date(2026, 11, 6, 13, 58, 10, 0, location),
+		IssuedAt:  cal.MakeDateTime(2026, 11, 6, 13, 58, 10),
 		Number:    r.Number,
 		Total:     "10.65",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, zki, r.ZKI)
+}
+
+// The issue time is copied as it is, never converted: 02:30 on 29 March
+// 2026 does not exist in Croatia, since clocks go from 02:00 to 03:00, and
+// a time.Time in Europe/Zagreb would move it to 03:30.
+func TestIssueTimeInClockChange(t *testing.T) {
+	key := testKey(t)
+	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+	inv.IssueDate = cal.MakeDate(2026, 3, 29)
+	inv.IssueTime = cal.NewTime(2, 30, 0)
+	r, err := FromInvoice(inv, testOptions(), key)
+	require.NoError(t, err)
+	assert.Equal(t, "29.03.2026T02:30:00", r.IssuedAt)
+	zki, err := ZKI(key, &ZKIInput{
+		IssuerOIB: invopopOIB,
+		IssuedAt:  cal.MakeDateTime(2026, 3, 29, 2, 30, 0),
+		Number:    r.Number,
+		Total:     r.Total,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, zki, r.ZKI)

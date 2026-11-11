@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/invopop/gobl/cal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,9 +48,9 @@ func invoiceNumber(sentAt time.Time, i int) string {
 // cisTestInvoice is a €12.50 card invoice with 25 % VAT, issued at sentAt
 // by Invopop at premises POS1, device 1.
 func cisTestInvoice(cert *Certificate, number, operator string, sentAt time.Time, messageID string) (*InvoiceRequest, error) {
-	now := sentAt.In(location)
+	now := sentAt.In(zagreb)
 	num := &Number{Sequential: number, Premises: testPremises, Device: "1"}
-	zki, err := ZKI(cert.Key, &ZKIInput{IssuerOIB: invopopOIB, IssuedAt: now, Number: num, Total: testTotal})
+	zki, err := ZKI(cert.Key, &ZKIInput{IssuerOIB: invopopOIB, IssuedAt: cal.DateTimeOf(now), Number: num, Total: testTotal})
 	if err != nil {
 		return nil, err
 	}
