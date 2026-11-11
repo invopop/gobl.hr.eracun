@@ -229,6 +229,20 @@ func TestIssueTimeInClockChange(t *testing.T) {
 	assert.Equal(t, zki, r.ZKI)
 }
 
+// The exempt total keeps its cents.
+func TestExemptCents(t *testing.T) {
+	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+	for _, l := range inv.Lines {
+		l.Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
+	}
+	require.NoError(t, inv.Calculate())
+	r, err := FromInvoice(inv, testOptions(), testKey(t))
+	require.NoError(t, err)
+	assert.Empty(t, r.VAT)
+	assert.Equal(t, "10.65", r.VATExemptAmount)
+	assert.Equal(t, "10.65", r.Total)
+}
+
 func TestOptions(t *testing.T) {
 	key := testKey(t)
 	env := loadExample(t, "cash-prices-include-vat.json")

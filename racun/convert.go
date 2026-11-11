@@ -243,7 +243,9 @@ func addTaxes(r *Invoice, inv *bill.Invoice) error {
 	if inv.Totals.Taxes == nil {
 		return nil
 	}
-	var exempt, outside num.Amount
+	// The totals start with two decimals: Add keeps the decimals of its
+	// receiver, so a zero Amount would round every base to whole euros.
+	exempt, outside := num.MakeAmount(0, 2), num.MakeAmount(0, 2)
 	var hasExempt, hasOutside bool
 	for _, cat := range inv.Totals.Taxes.Categories {
 		if cat.Code != tax.CategoryVAT {
