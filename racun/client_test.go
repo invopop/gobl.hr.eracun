@@ -327,7 +327,7 @@ func TestSendInvoice(t *testing.T) {
 		res, err := c.Fiscalize(context.Background(), testRequest())
 		require.ErrorIs(t, err, ErrSignature)
 		assert.ErrorContains(t, err, "the answer is for message "+acceptedCassette(t).MessageID)
-		assert.NotNil(t, res)
+		assert.Nil(t, res, "the answer holds another invoice's JIR")
 	})
 
 	t.Run("Fiscalize returns the JIR for its own message", func(t *testing.T) {

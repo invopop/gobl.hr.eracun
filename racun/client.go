@@ -132,9 +132,10 @@ func (c *Client) Fiscalize(ctx context.Context, req *InvoiceRequest) (*InvoiceRe
 	}
 	res, err := c.SendInvoice(ctx, envelope)
 	// Sign requires the request's message ID and the answer is only
-	// returned with one, so the check never skips.
+	// returned with one, so the check never skips. An answer to another
+	// message is not returned: its JIR is another invoice's.
 	if res != nil && res.Header.MessageID != req.Header.MessageID {
-		return res, ErrSignature.WithRequestWritten(true).WithMessage(fmt.Sprintf(
+		return nil, ErrSignature.WithRequestWritten(true).WithMessage(fmt.Sprintf(
 			"the answer is for message %s, not %s", res.Header.MessageID, req.Header.MessageID))
 	}
 	return res, err
