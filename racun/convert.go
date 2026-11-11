@@ -153,9 +153,15 @@ func checkInvoice(inv *bill.Invoice) error {
 		// it.
 		return fmt.Errorf("rounding %s %w", inv.Totals.Rounding, ErrUnsupported)
 	}
-	// A charge or discount with VAT is in Totals.Taxes, so the VAT
+	// A line, charge or discount with VAT is in Totals.Taxes, so the VAT
 	// breakdown includes it. One without taxes changes the total but no
-	// breakdown, and is usually a fee (Naknade), which is not supported.
+	// breakdown. A charge without taxes is usually a fee (Naknade), which is
+	// not supported.
+	for i, l := range inv.Lines {
+		if len(l.Taxes) == 0 {
+			return fmt.Errorf("line %d without taxes %w: use the VAT key exempt or outside-scope", i+1, ErrUnsupported)
+		}
+	}
 	for _, c := range inv.Charges {
 		if len(c.Taxes) == 0 {
 			return fmt.Errorf("charge %q without taxes %w: fees (Naknade) are not supported", c.Reason, ErrUnsupported)

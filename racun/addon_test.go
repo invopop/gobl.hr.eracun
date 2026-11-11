@@ -45,6 +45,9 @@ func TestAddonRefusesUnsupported(t *testing.T) {
 		{"a discount without taxes", func(i *bill.Invoice) {
 			i.Discounts = []*bill.Discount{{Amount: num.MakeAmount(10, 2), Reason: "Promo"}}
 		}},
+		{"a line without taxes", func(i *bill.Invoice) {
+			i.Lines[0].Taxes = nil
+		}},
 		{"a reverse charge", func(i *bill.Invoice) {
 			i.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyReverseCharge}}
 		}},

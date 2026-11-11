@@ -166,7 +166,7 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
-		// Rules 18 to 22 refuse what the racun conversion refuses. A valid
+		// Rules 18 to 23 refuse what the racun conversion refuses. A valid
 		// invoice must always convert: Invopop numbers it before it is
 		// fiscalized, and a numbered invoice that is never issued leaves a
 		// gap in the sequence, which Art. 9(2) of the Fiscalization Act
@@ -176,10 +176,13 @@ func billInvoiceRules() *rules.Set {
 		// corrections (EU3-29) and fees (EU3-34). Drop a rule when racun
 		// supports its case.
 		//
-		// Rules 20 and 22 stay: the invoice request has no element for a
-		// rounding amount or a discount without taxes. Both change the total
-		// but no tax breakdown, and CIS checks that the total is the sum of
-		// the breakdowns (check v166, spec v2.7, p. 212).
+		// Rules 20, 22 and 23 stay: the invoice request has no element for a
+		// rounding amount, a discount without taxes or a line without taxes.
+		// Each changes the total but no tax breakdown, and CIS checks that
+		// the total is the sum of the breakdowns (check v166, spec v2.7,
+		// p. 212). A line must say how VAT applies to it, even when it is
+		// exempt or outside its scope, for racun to put its amount in the
+		// right breakdown.
 		rules.Field("type",
 			rules.Assert("18", "invoice type must be standard: corrections are not supported yet", is.In(bill.InvoiceTypeStandard)),
 		),
@@ -202,6 +205,13 @@ func billInvoiceRules() *rules.Set {
 			rules.Each(
 				rules.Field("taxes",
 					rules.Assert("22", "invoice discount requires VAT: the invoice request has no element for a discount without taxes", is.Present),
+				),
+			),
+		),
+		rules.Field("lines",
+			rules.Each(
+				rules.Field("taxes",
+					rules.Assert("23", "invoice line requires VAT, with the key exempt or outside-scope when no VAT applies: the invoice request has no element for a line without taxes", is.Present),
 				),
 			),
 		),

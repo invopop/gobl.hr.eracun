@@ -104,9 +104,10 @@ func newAddon() *tax.AddonDef {
 				gaps, Art. 9(2) of the Fiscalization Act). Credit notes and other
 				corrections, negative totals, charges without VAT, taxes other
 				than VAT, and reverse charge are not supported yet. A rounding
-				amount and a discount without VAT are never accepted: the invoice
-				request has no element for them, and CIS checks that the total is
-				the sum of the tax breakdowns.
+				amount, a discount without VAT and a line without VAT are never
+				accepted: the invoice request has no element for them, and CIS
+				checks that the total is the sum of the tax breakdowns. A line
+				with no VAT to charge uses the VAT key exempt or outside-scope.
 			`),
 		},
 		Sources: []*cbc.Source{

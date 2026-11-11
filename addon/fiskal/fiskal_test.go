@@ -183,6 +183,7 @@ func TestInvoiceRules(t *testing.T) {
 		{"a discount without taxes", func(inv *bill.Invoice) {
 			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(10, 2), Reason: "Promo"}}
 		}, "22"},
+		{"a line without taxes", func(inv *bill.Invoice) { inv.Lines[0].Taxes = nil }, "23"},
 		{"VAT outside the VAT system", func(inv *bill.Invoice) {
 			inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{fiskal.ExtKeyVATSystem: fiskal.VATSystemOut})
 		}, "16"},
