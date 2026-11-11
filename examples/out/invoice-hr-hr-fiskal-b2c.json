@@ -4,7 +4,7 @@
 		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
 		"dig": {
 			"alg": "sha256",
-			"val": "18dfdfa57c6b566da4a369cfea57c3c6e3338582c432120cf43f86c3ce1626e6"
+			"val": "ca3c4b23c0297c68ca4b7a456391b97e1c0686a7caf52aca03c911ab8684a43e"
 		}
 	},
 	"doc": {
@@ -15,6 +15,7 @@
 		],
 		"uuid": "019a5a3e-6c1e-7d4a-9b8e-2f4c6a8d0e12",
 		"type": "standard",
+		"series": "POS1",
 		"code": "1001",
 		"issue_date": "2026-11-06",
 		"issue_time": "13:58:10",

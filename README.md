@@ -109,7 +109,20 @@ The `hr-fiskal-b2c-v1` addon sets these on the invoice tax:
 | `hr-fiskal-paper-number` | Number of an invoice from the bound paper invoice book, entered after the till broke down (`ParagonBrRac`): up to 100 characters. Such an invoice is sent late. |
 
 The invoice code is the bare sequential number (`BrOznRac`): digits with no
-leading zero.
+leading zero. A printed invoice shows the number as
+`BrOznRac/OznPosPr/OznNapUr`, such as `1001/POS1/1`.
+
+The number can come from two places:
+
+- **A till that numbers its own invoices** sends the code with the labels.
+- **Invopop numbers the invoice.** The invoice arrives without a code, and the
+  sequence step of the workflow gives it one. That step keeps one counter for
+  each supplier and series, so the addon sets the series from the labels: the
+  premises label for scope `P` (`POS1`), or `<premises>/<device>` for scope `N`
+  (`POS1/1`). The step must use padding 0, as CIS refuses leading zeros.
+
+The rules refuse a series that does not match the labels, so that a counter
+never numbers two premises or two devices.
 
 The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
 invoice is paid. The regime adds the legal VAT note, and the UBL export writes

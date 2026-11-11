@@ -6,6 +6,7 @@ import (
 
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
+	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
@@ -37,6 +38,34 @@ func normalizeInvoice(inv *bill.Invoice) {
 	if !inv.Tax.Ext.Has(ExtKeyVATSystem) {
 		inv.Tax.Ext = inv.Tax.Ext.Set(ExtKeyVATSystem, VATSystemIn)
 	}
+	if inv.Series == cbc.CodeEmpty {
+		inv.Series = Series(inv.Tax.Ext)
+	}
+}
+
+// Series provides the invoice series that matches the numbering scope: the
+// business premises label for scope P, such as "POS1", or the premises and
+// device labels for scope N, such as "POS1/1". It is empty without the
+// labels.
+//
+// An invoice counter belongs to one series. When Invopop numbers the
+// invoices, its sequence service keeps one counter for each supplier and
+// series, so this series gives one counter for each business premises, or
+// for each device, as the numbering scope requires. A till that numbers its
+// own invoices can leave the series empty.
+func Series(ext tax.Extensions) cbc.Code {
+	premises := ext.Get(ExtKeyPremises)
+	if premises == cbc.CodeEmpty {
+		return cbc.CodeEmpty
+	}
+	if ext.Get(ExtKeySequenceScope) != SequenceDevice {
+		return premises
+	}
+	device := ext.Get(ExtKeyDevice)
+	if device == cbc.CodeEmpty {
+		return cbc.CodeEmpty
+	}
+	return premises + "/" + device
 }
 
 // normalizeIssueTime sets the issue time fiscalization needs to the current
@@ -61,11 +90,15 @@ func normalizeIssueTime(inv *bill.Invoice) {
 
 func billInvoiceRules() *rules.Set {
 	return rules.For(new(bill.Invoice),
+		// The code is not required: a draft has none until Invopop numbers it,
+		// and GOBL signs an invoice only with a code.
 		rules.Field("code",
-			rules.Assert("01", "invoice code is required and must be the sequential number: digits with no leading zero (BrOznRac)",
-				is.Present,
+			rules.AssertIfPresent("01", "invoice code must be the sequential number: digits with no leading zero (BrOznRac)",
 				is.MatchesRegexp(sequentialPattern),
 			),
+		),
+		rules.Assert("17", "invoice series must match the numbering scope: the premises label for scope P, or <premises>/<device> for scope N, so that each counter numbers one premises or one device (OznSlijed)",
+			is.Func("series matches the numbering scope", seriesMatchesScope),
 		),
 		rules.Field("issue_time",
 			rules.Assert("02", "invoice issue time is required for an invoice not dated today in Croatia (DatVrijeme)", is.Present),
@@ -146,6 +179,14 @@ func isOperator(val any) bool {
 func identitiesHaveOIB(val any) bool {
 	ids, _ := val.([]*org.Identity)
 	return org.IdentityForType(ids, hr.IdentityTypeOIB) != nil
+}
+
+func seriesMatchesScope(val any) bool {
+	inv, ok := val.(*bill.Invoice)
+	if !ok || inv == nil || inv.Tax == nil || inv.Series == cbc.CodeEmpty {
+		return true
+	}
+	return inv.Series == Series(inv.Tax.Ext)
 }
 
 func outsideVATSystem(val any) bool {

@@ -65,6 +65,14 @@ func newAddon() *tax.AddonDef {
 				The numbering scope (hr-fiskal-sequence-scope) is per business
 				premises unless set to N, per device.
 
+				The invoice can arrive with its number, from a till that numbers its
+				own invoices, or without a code, for Invopop to number it. The series
+				is set from the labels to match the numbering scope: the premises
+				label for scope P, such as "POS1", or the premises and device labels
+				for scope N, such as "POS1/1". A counter that runs per series then
+				numbers each premises, or each device, on its own. A series that does
+				not match the labels is refused.
+
 				The operator is the supplier person with the "operator" key, with an
 				OIB identity: the person at the till, or the supplier for a
 				self-service device. It is the same convention as the hr-eracun-v1

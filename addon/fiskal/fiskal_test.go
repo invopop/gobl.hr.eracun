@@ -169,3 +169,49 @@ func TestInvoiceRules(t *testing.T) {
 		require.NoError(t, rules.Validate(inv))
 	})
 }
+
+// TestNumbering covers both ways an invoice gets its number: a till that
+// numbers its own invoices sends the code, and Invopop numbers a draft
+// without one.
+func TestNumbering(t *testing.T) {
+	t.Run("a draft without a code", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Code = ""
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+		assert.Equal(t, cbc.Code("POS1"), inv.Series)
+	})
+	t.Run("series per device", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Tax.Ext = inv.Tax.Ext.Set(fiskal.ExtKeySequenceScope, fiskal.SequenceDevice)
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+		assert.Equal(t, cbc.Code("POS1/1"), inv.Series)
+	})
+	t.Run("a series that matches the labels", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Series = "POS1"
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+	})
+	t.Run("a series of another premises", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Series = "POS2"
+		assertFault(t, inv, faultCode("17"))
+	})
+	t.Run("a series per device with scope P", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Series = "POS1/1"
+		assertFault(t, inv, faultCode("17"))
+	})
+}
+
+func TestSeries(t *testing.T) {
+	ext := func(m cbc.CodeMap) tax.Extensions { return tax.ExtensionsOf(m) }
+	assert.Equal(t, cbc.Code("POS1"), fiskal.Series(ext(cbc.CodeMap{fiskal.ExtKeyPremises: "POS1", fiskal.ExtKeyDevice: "2"})))
+	assert.Equal(t, cbc.Code("POS1/2"), fiskal.Series(ext(cbc.CodeMap{
+		fiskal.ExtKeyPremises: "POS1", fiskal.ExtKeyDevice: "2", fiskal.ExtKeySequenceScope: fiskal.SequenceDevice,
+	})))
+	assert.Empty(t, fiskal.Series(ext(cbc.CodeMap{fiskal.ExtKeyDevice: "2"})))
+	assert.Empty(t, fiskal.Series(ext(cbc.CodeMap{fiskal.ExtKeyPremises: "POS1", fiskal.ExtKeySequenceScope: fiskal.SequenceDevice})))
+}
