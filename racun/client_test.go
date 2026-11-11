@@ -64,6 +64,10 @@ func TestNew(t *testing.T) {
 		_, err := New(&Config{Environment: "test", Certificate: testCertificate(t), CABundle: bundle})
 		assert.ErrorContains(t, err, "unknown CIS environment")
 	})
+	t.Run("no configuration", func(t *testing.T) {
+		_, err := New(nil)
+		assert.EqualError(t, err, "no configuration")
+	})
 	t.Run("no certificate", func(t *testing.T) {
 		_, err := New(&Config{Environment: EnvironmentSandbox, CABundle: bundle})
 		assert.ErrorContains(t, err, "certificate is required")

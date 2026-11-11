@@ -78,6 +78,9 @@ type Client struct {
 
 // New checks the configuration and prepares a client.
 func New(conf *Config) (*Client, error) {
+	if conf == nil {
+		return nil, errors.New("no configuration")
+	}
 	endpoint, ok := endpoints[conf.Environment]
 	if !ok {
 		return nil, fmt.Errorf("unknown CIS environment %q", conf.Environment)
