@@ -223,9 +223,11 @@ func operatorOIB(inv *bill.Invoice) (string, error) {
 // are local to the regime and have no zone, and so do the Invoice's, so they
 // are copied as they are: a time.Time would move a time that does not exist
 // in Croatia, such as 02:30 on the day clocks go forward. Fiscalization
-// needs the time, so it must be set.
+// needs the time, so it must be set. Only a nil time is missing: 00:00:00
+// is the zero value of cal.Time, but it is also midnight, a valid issue
+// time.
 func issueTime(inv *bill.Invoice) (cal.DateTime, error) {
-	if inv.IssueTime == nil || inv.IssueTime.IsZero() {
+	if inv.IssueTime == nil {
 		return cal.DateTime{}, fmt.Errorf("issue time %w", ErrMissing)
 	}
 	d, t := inv.IssueDate, inv.IssueTime

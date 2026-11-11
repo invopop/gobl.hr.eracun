@@ -232,6 +232,18 @@ func TestIssueTimeInClockChange(t *testing.T) {
 	assert.Equal(t, zki, r.ZKI)
 }
 
+// An invoice issued at midnight is valid and converts: 00:00:00 is the zero
+// value of cal.Time, but not a missing time.
+func TestIssueTimeAtMidnight(t *testing.T) {
+	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
+	inv.IssueTime = cal.NewTime(0, 0, 0)
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+	r, err := FromInvoice(inv, testOptions(), testKey(t))
+	require.NoError(t, err)
+	assert.Equal(t, "T00:00:00", r.IssuedAt[len(r.IssuedAt)-9:])
+}
+
 // The exempt total keeps its cents.
 func TestExemptCents(t *testing.T) {
 	inv := loadExample(t, "cash-prices-include-vat.json").Extract().(*bill.Invoice)
@@ -406,7 +418,7 @@ func TestErrors(t *testing.T) {
 	t.Run("an issue time ZKI needs", func(t *testing.T) {
 		env := loadExample(t, "cash-prices-include-vat.json")
 		inv := env.Extract().(*bill.Invoice)
-		inv.IssueTime = cal.NewTime(0, 0, 0)
+		inv.IssueTime = nil
 		_, err := FromInvoice(inv, testOptions(), key)
 		assert.ErrorIs(t, err, ErrMissing)
 	})
