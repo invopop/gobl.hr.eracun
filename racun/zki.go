@@ -4,6 +4,7 @@ import (
 	"crypto"
 	"crypto/md5" //nolint:gosec // the specification defines the ZKI with MD5
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -32,9 +33,14 @@ type ZKIInput struct {
 //
 // Only the holder of the private key can compute it, and it needs no
 // connection to CIS, so an invoice can carry it when CIS can't be reached.
+// The key must be RSA: an RSA signature is the same every time, so the ZKI
+// of an invoice is too, while an ECDSA one changes with each call.
 func ZKI(key crypto.Signer, in *ZKIInput) (string, error) {
 	if key == nil {
 		return "", errors.New("no key")
+	}
+	if _, ok := key.Public().(*rsa.PublicKey); !ok {
+		return "", errors.New("the key is not RSA")
 	}
 	if in == nil || in.Number == nil {
 		return "", errors.New("no invoice number")

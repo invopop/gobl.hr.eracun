@@ -83,8 +83,10 @@ type Client struct {
 	now func() time.Time
 }
 
-// New checks the configuration and prepares a client. The client trusts
-// the FINA chain of its environment, from package ca, and nothing else.
+// New checks the configuration and prepares a client. The certificate must
+// have an RSA key that belongs to it and be valid now, so that a broken or
+// expired one stops a service at start. The client trusts the FINA chain of
+// its environment, from package ca, and nothing else.
 func New(conf *Config) (*Client, error) {
 	if conf == nil {
 		return nil, errors.New("no configuration")
@@ -93,8 +95,8 @@ func New(conf *Config) (*Client, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown CIS environment %q", conf.Environment)
 	}
-	if conf.Certificate == nil || conf.Certificate.Cert == nil || conf.Certificate.Key == nil {
-		return nil, errors.New("a signing certificate is required")
+	if err := conf.Certificate.check(time.Now()); err != nil {
+		return nil, fmt.Errorf("signing certificate: %w", err)
 	}
 	// The TLS configuration and the answer check share one pool.
 	roots := chains[conf.Environment]()

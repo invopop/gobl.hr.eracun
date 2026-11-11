@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"software.sslmate.com/src/go-pkcs12"
 )
@@ -18,6 +19,30 @@ type Certificate struct {
 	Key  crypto.Signer
 	// Chain holds the intermediate certificates, if any.
 	Chain []*x509.Certificate
+}
+
+// check returns an error unless the certificate can sign at now: it has a
+// certificate and a key, the key is RSA and belongs to the certificate, and
+// now is within the certificate's validity dates. CIS would refuse a request
+// signed otherwise (s002, s004), but only after the invoice was issued.
+func (c *Certificate) check(now time.Time) error {
+	if c == nil || c.Cert == nil || c.Key == nil {
+		return errors.New("no certificate")
+	}
+	pub, ok := c.Key.Public().(*rsa.PublicKey)
+	if !ok {
+		return errors.New("the private key is not RSA")
+	}
+	if !pub.Equal(c.Cert.PublicKey) {
+		return errors.New("the private key does not belong to the certificate")
+	}
+	if now.Before(c.Cert.NotBefore) {
+		return fmt.Errorf("the certificate is not valid until %s", c.Cert.NotBefore.Format(time.RFC3339))
+	}
+	if now.After(c.Cert.NotAfter) {
+		return fmt.Errorf("the certificate expired at %s", c.Cert.NotAfter.Format(time.RFC3339))
+	}
+	return nil
 }
 
 // LoadCertificate reads a certificate and its private key from a PKCS#12

@@ -71,7 +71,7 @@ func TestNew(t *testing.T) {
 	})
 	t.Run("no certificate", func(t *testing.T) {
 		_, err := New(&Config{Environment: EnvironmentSandbox})
-		assert.ErrorContains(t, err, "certificate is required")
+		assert.EqualError(t, err, "signing certificate: no certificate")
 	})
 }
 
