@@ -173,6 +173,14 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Supplier.People = append(inv.Supplier.People, inv.Supplier.People[0])
 		}, "14"},
 		{"operator without an OIB", func(inv *bill.Invoice) { inv.Supplier.People[0].Identities = nil }, "15"},
+		{"a credit note", func(inv *bill.Invoice) { inv.Type = bill.InvoiceTypeCreditNote }, "18"},
+		{"a negative total", func(inv *bill.Invoice) { inv.Lines[0].Item.Price = num.NewAmount(-250, 2) }, "19"},
+		{"a charge without taxes", func(inv *bill.Invoice) {
+			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(10, 2), Reason: "Povratna naknada"}}
+		}, "21"},
+		{"a discount without taxes", func(inv *bill.Invoice) {
+			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(10, 2), Reason: "Promo"}}
+		}, "22"},
 		{"VAT outside the VAT system", func(inv *bill.Invoice) {
 			inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{fiskal.ExtKeyVATSystem: fiskal.VATSystemOut})
 		}, "16"},
@@ -246,4 +254,24 @@ func TestSeries(t *testing.T) {
 	})))
 	assert.Empty(t, fiskal.Series(ext(cbc.CodeMap{fiskal.ExtKeyDevice: "2"})))
 	assert.Empty(t, fiskal.Series(ext(cbc.CodeMap{fiskal.ExtKeyPremises: "POS1", fiskal.ExtKeySequenceScope: fiskal.SequenceDevice})))
+}
+
+func TestRounding(t *testing.T) {
+	inv := testInvoice()
+	require.NoError(t, inv.Calculate())
+	r := num.MakeAmount(-5, 2)
+	inv.Totals.Rounding = &r
+	require.NoError(t, inv.Calculate())
+	faults := rules.Validate(inv)
+	require.Error(t, faults)
+	assert.True(t, faults.HasCode(faultCode("20")), "got %s", faults)
+}
+
+func TestTaxComboRules(t *testing.T) {
+	inv := testInvoice()
+	inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyReverseCharge}}
+	require.NoError(t, inv.Calculate())
+	faults := rules.Validate(inv)
+	require.Error(t, faults)
+	assert.True(t, faults.HasCode(rules.GOBL.Add(fiskal.Namespace).Add("TAX-COMBO").Add("02")), "got %s", faults)
 }

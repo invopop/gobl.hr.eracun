@@ -38,6 +38,7 @@ func init() {
 		rules.GOBL.Add(Namespace),
 		is.InContext(tax.AddonIn(V1)),
 		billInvoiceRules(),
+		taxComboRules(),
 	)
 	norm.RegisterWithGuard(is.InContext(tax.AddonIn(V1)),
 		norm.For(normalizeInvoice),
@@ -92,6 +93,12 @@ func newAddon() *tax.AddonDef {
 
 				Once fiscalized, the invoice is stamped with the ZKI, the JIR and the
 				URL of the QR code to print.
+
+				Some invoices can't be fiscalized yet, and are refused before they
+				are numbered, so that no number is lost (the sequence must have no
+				gaps, Art. 9(2) of the Fiscalization Act): credit notes and other
+				corrections, negative totals, a rounding amount, charges and discounts
+				without VAT, taxes other than VAT, and reverse charge.
 			`),
 		},
 		Sources: []*cbc.Source{

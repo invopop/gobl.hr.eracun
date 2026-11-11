@@ -163,10 +163,71 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
+		// Rules 18 to 22 refuse what the racun conversion does not support
+		// yet. A valid invoice must always convert: Invopop numbers it before
+		// it is fiscalized, and a numbered invoice that is never issued
+		// leaves a gap in the sequence, which Art. 9(2) of the
+		// Fiscalization Act forbids. Drop a rule when racun supports the
+		// case.
+		rules.Field("type",
+			rules.Assert("18", "invoice type must be standard: corrections are not supported yet", is.In(bill.InvoiceTypeStandard)),
+		),
+		rules.Field("totals",
+			rules.Assert("19", "invoice total must not be negative: corrections are not supported yet",
+				is.Func("payable not negative", totalsPayableNotNegative),
+			),
+			rules.Assert("20", "invoice rounding is not supported: the invoice request has no element for it",
+				is.Func("no rounding", totalsHaveNoRounding),
+			),
+		),
+		rules.Field("charges",
+			rules.Each(
+				rules.Field("taxes",
+					rules.Assert("21", "invoice charge requires VAT: fees without taxes (Naknade) are not supported yet", is.Present),
+				),
+			),
+		),
+		rules.Field("discounts",
+			rules.Each(
+				rules.Field("taxes",
+					rules.Assert("22", "invoice discount requires VAT: the invoice request has no element for a discount without taxes", is.Present),
+				),
+			),
+		),
+	)
+}
+
+// taxComboRules refuse the taxes that the racun conversion does not support
+// yet, for the same reason as rules 18 to 22 of the invoice.
+func taxComboRules() *rules.Set {
+	return rules.For(new(tax.Combo),
+		rules.Field("cat",
+			rules.Assert("01", "tax category must be VAT: other taxes are not supported yet", is.In(tax.CategoryVAT)),
+		),
+		rules.Field("key",
+			rules.Assert("02", "VAT key must not be reverse-charge or intra-community: not supported yet",
+				is.Func("not reverse charge", keyNotReverseCharge),
+			),
+		),
 	)
 }
 
 // -- Predicates -----------------------------------------------------------
+
+func totalsPayableNotNegative(val any) bool {
+	t, ok := val.(*bill.Totals)
+	return !ok || t == nil || !t.Payable.IsNegative()
+}
+
+func totalsHaveNoRounding(val any) bool {
+	t, ok := val.(*bill.Totals)
+	return !ok || t == nil || t.Rounding == nil || t.Rounding.IsZero()
+}
+
+func keyNotReverseCharge(val any) bool {
+	k, ok := val.(cbc.Key)
+	return !ok || !k.In(tax.KeyReverseCharge, tax.KeyIntraCommunity)
+}
 
 func peopleHaveOneOperator(val any) bool {
 	people, _ := val.([]*org.Person)
