@@ -36,16 +36,6 @@ func testCertificate(t *testing.T) *Certificate {
 	return &Certificate{Cert: cert, Key: key}
 }
 
-// zagreb is Croatian local time, for tests that start from a moment, such
-// as when a request is sent, and need the time a Croatian clock shows.
-var zagreb = func() *time.Location {
-	loc, err := time.LoadLocation("Europe/Zagreb")
-	if err != nil {
-		panic(err)
-	}
-	return loc
-}()
-
 // testBase is the taxable base of every tax in the test invoices.
 const (
 	testBase     = "10.00"

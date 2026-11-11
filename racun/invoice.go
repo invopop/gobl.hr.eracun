@@ -1,6 +1,11 @@
 package racun
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // InvoiceRequestID is the Id attribute of an InvoiceRequest, which its
 // signature references as "#RacunZahtjev" (§7).
@@ -13,6 +18,21 @@ type InvoiceRequest struct {
 	ID      string   `xml:"Id,attr"`
 	Header  *Header  `xml:"Zaglavlje"`
 	Invoice *Invoice `xml:"Racun"`
+}
+
+// NewRequest wraps an Invoice in a request to send now: the request's Id, a
+// new message ID, and the time on a Croatian clock as the send time. Build
+// a new request for every send, retries included: CIS needs a new message
+// ID each time, and the send time is when it is built.
+func NewRequest(inv *Invoice) *InvoiceRequest {
+	return &InvoiceRequest{
+		ID: InvoiceRequestID,
+		Header: &Header{
+			MessageID: uuid.NewString(),
+			SentAt:    time.Now().In(zagreb).Format(DateTimeFormat),
+		},
+		Invoice: inv,
+	}
 }
 
 // Header heads every request (Zaglavlje).

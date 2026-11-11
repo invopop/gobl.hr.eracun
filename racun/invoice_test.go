@@ -4,10 +4,34 @@ import (
 	"encoding/xml"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNewRequest(t *testing.T) {
+	inv := testRequest().Invoice
+	before := time.Now().Truncate(time.Second)
+	req := NewRequest(inv)
+	after := time.Now()
+
+	assert.Equal(t, InvoiceRequestID, req.ID)
+	assert.Same(t, inv, req.Invoice)
+	id, err := uuid.Parse(req.Header.MessageID)
+	require.NoError(t, err)
+	assert.Equal(t, uuid.Version(4), id.Version())
+	assert.NotEqual(t, req.Header.MessageID, NewRequest(inv).Header.MessageID, "every request gets a new message ID")
+
+	// The send time is the Croatian clock's, whatever the host's zone.
+	sentAt, err := time.ParseInLocation(DateTimeFormat, req.Header.SentAt, zagreb)
+	require.NoError(t, err)
+	assert.False(t, sentAt.Before(before) || sentAt.After(after), "sent at %s, not between %s and %s", sentAt, before, after)
+
+	_, err = Sign(testCertificate(t), req)
+	assert.NoError(t, err, "Sign takes the request as it is")
+}
 
 func TestInvoiceRequestXML(t *testing.T) {
 	t.Run("writes the elements in schema order", func(t *testing.T) {
