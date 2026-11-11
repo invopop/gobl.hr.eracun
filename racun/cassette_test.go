@@ -118,7 +118,7 @@ func fiscalizeCassette(t *testing.T, name string, wantAccepted bool, build build
 		return
 	}
 	require.ErrorIs(t, err, ErrCIS)
-	assert.Equal(t, c.ErrorCode, CodeOf(err))
+	assert.Equal(t, c.ErrorCode, RefusalCode(err))
 }
 
 func recordCassette(t *testing.T, name string, wantAccepted bool, build buildRequest) {
@@ -140,7 +140,7 @@ func recordCassette(t *testing.T, name string, wantAccepted bool, build buildReq
 	case err == nil && wantAccepted:
 		c.JIR = res.JIR
 	case errors.Is(err, ErrCIS) && !wantAccepted:
-		c.ErrorCode = CodeOf(err)
+		c.ErrorCode = RefusalCode(err)
 	default:
 		t.Fatalf("unexpected outcome, nothing recorded: %v", err)
 	}

@@ -87,7 +87,7 @@ func TestReadRecordedAnswers(t *testing.T) {
 		// CIS answers a refusal with HTTP 500 and a signed RacunOdgovor.
 		res, err := recordedClient(t).readInvoiceAnswer(500, readTestdata(t, "testdata/cistest/refused-answer.xml"))
 		require.ErrorIs(t, err, ErrCIS)
-		assert.Equal(t, "s013", CodeOf(err))
+		assert.Equal(t, "s013", RefusalCode(err))
 		assert.Equal(t, "cis: s013: Račun sadrži restriktivne greške: 179", err.Error())
 		require.NotNil(t, res)
 		assert.Empty(t, res.JIR)
@@ -293,6 +293,44 @@ func TestAnswerBreaksSpecification(t *testing.T) {
 	t.Run("neither a JIR nor errors", func(t *testing.T) {
 		protocolErr(t, 200, sign(answer(answerHeader)), "neither a JIR nor errors")
 	})
+}
+
+func TestAnswerErrors(t *testing.T) {
+	c, sign := signingCIS(t)
+	greske := func(codes ...string) string {
+		out := `<Greske>`
+		for _, code := range codes {
+			out += `<Greska><SifraGreske>` + code + `</SifraGreske><PorukaGreske>m` + code + `</PorukaGreske></Greska>`
+		}
+		return out + `</Greske>`
+	}
+
+	t.Run("a refusal", func(t *testing.T) {
+		res, err := c.readInvoiceAnswer(500, sign(answer(answerHeader+greske("s005"))))
+		require.ErrorIs(t, err, ErrCIS)
+		assert.Equal(t, "s005", RefusalCode(err))
+		assert.EqualError(t, err, "cis: s005: ms005")
+		require.NotNil(t, res, "a refusal comes with its answer")
+		assert.Len(t, res.Errors, 1)
+		var e *Error
+		require.True(t, errors.As(err, &e))
+		assert.False(t, e.RequestWritten())
+	})
+	for name, codes := range map[string][]string{
+		"a system error":                   {"s006"},
+		"a system error after another one": {"s013", "s006"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			res, err := c.readInvoiceAnswer(500, sign(answer(answerHeader+greske(codes...))))
+			require.ErrorIs(t, err, ErrServer)
+			assert.Nil(t, res)
+			assert.Empty(t, RefusalCode(err), "a system error is not a refusal")
+			var e *Error
+			require.True(t, errors.As(err, &e))
+			assert.Equal(t, "s006", e.Code())
+			assert.True(t, e.RequestWritten(), "CIS may have recorded the invoice")
+		})
+	}
 }
 
 func TestSendInvoice(t *testing.T) {

@@ -21,11 +21,14 @@ import (
 var (
 	// ErrCIS is a refusal: a signed answer with errors, whose Code is the
 	// first error's code (such as "s005"), or a SOAP client fault, whose
-	// Code is the fault code. CIS recorded nothing.
+	// Code is the fault code. CIS recorded nothing. A system error at CIS
+	// (s006) is not a refusal but an ErrServer.
 	ErrCIS = newError("cis")
-	// ErrServer is a SOAP fault CIS raised on its own side (fault code
-	// Server or Server.*). CIS got the request, and a fault does not prove
-	// it recorded nothing, so RequestWritten is true.
+	// ErrServer is a failure on CIS's own side: a SOAP fault with fault
+	// code Server or Server.*, whose Code is the fault code, or a signed
+	// answer with a system error, whose Code is "s006". CIS got the
+	// request, and a failure does not prove it recorded nothing, so
+	// RequestWritten is true.
 	ErrServer = newError("server")
 	// ErrConnection is a call that got no answer from CIS: the connection
 	// failed, timed out or dropped, the answer was too large, CIS answered
@@ -143,9 +146,11 @@ func (e *Error) Is(target error) bool {
 	return e.key == t.key
 }
 
-// CodeOf returns the code of a CIS refusal, such as "s005", or the fault
-// code of a SOAP client fault. It returns "" for any other error.
-func CodeOf(err error) string {
+// RefusalCode returns the code of a CIS refusal (ErrCIS), such as "s005",
+// or the fault code of a SOAP client fault. It returns "" for any other
+// error, including a system error at CIS (s006), which is not a refusal;
+// Error.Code gives the code of any error.
+func RefusalCode(err error) string {
 	var e *Error
 	if errors.As(err, &e) && e.key == ErrCIS.key {
 		return e.code

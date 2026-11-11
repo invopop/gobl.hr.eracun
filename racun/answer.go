@@ -78,7 +78,7 @@ func (c *Client) readInvoiceAnswer(status int, data []byte) (*InvoiceResponse, e
 
 	switch {
 	case len(res.Errors) > 0:
-		return res, refusal(res.Errors)
+		return answerErrors(res)
 	case res.JIR == "":
 		return nil, ErrProtocol.WithRequestWritten(true).WithMessage("the answer has neither a JIR nor errors")
 	}
@@ -131,17 +131,37 @@ func faultError(fault *etree.Element) error {
 	return ErrCIS.WithCode(code).WithMessage(text)
 }
 
-// refusal is the ErrCIS for the errors in an answer: the first error's code
-// and message, or every error's code and message when there are more.
-func refusal(errs []*ResponseError) error {
+// codeSystemError is the error code of a system error at CIS ("Sistemska
+// pogreška prilikom obrade zahtjeva").
+const codeSystemError = "s006"
+
+// answerErrors is the error for an answer with errors. A system error at
+// CIS is not a refusal: CIS failed on its own side, a later retry can
+// succeed, and nothing proves CIS recorded nothing, so it is an ErrServer
+// with RequestWritten, and no answer. Any other error is a refusal, an
+// ErrCIS returned with the answer. Either has the first error's code, or the
+// system error's.
+func answerErrors(res *InvoiceResponse) (*InvoiceResponse, error) {
+	msg := errorsMessage(res.Errors)
+	for _, e := range res.Errors {
+		if e.Code == codeSystemError {
+			return nil, ErrServer.WithRequestWritten(true).WithCode(e.Code).WithMessage(msg)
+		}
+	}
+	return res, ErrCIS.WithCode(res.Errors[0].Code).WithMessage(msg)
+}
+
+// errorsMessage is the message of the first error, or every error's code
+// and message when there are more.
+func errorsMessage(errs []*ResponseError) string {
 	if len(errs) == 1 {
-		return ErrCIS.WithCode(errs[0].Code).WithMessage(errs[0].Message)
+		return errs[0].Message
 	}
 	msgs := make([]string, len(errs))
 	for i, e := range errs {
 		msgs[i] = e.Code + " " + e.Message
 	}
-	return ErrCIS.WithCode(errs[0].Code).WithMessage(strings.Join(msgs, "; "))
+	return strings.Join(msgs, "; ")
 }
 
 // verifyAnswer checks the enveloped signature of an answer message: that it
