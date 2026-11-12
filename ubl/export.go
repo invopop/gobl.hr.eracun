@@ -48,6 +48,8 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 	}
 	exportSellerContactPoint(inv, out)
 	exportSellerTaxRegistration(out)
+	exportPartyOIB(inv.Supplier, out.AccountingSupplierParty.Party)
+	exportPartyOIB(inv.Customer, out.AccountingCustomerParty.Party)
 	exportPaymentMeansText(inv, out)
 	removeOrderReferenceFiller(inv, out)
 	if err := exportLineTaxCategories(inv, out); err != nil {
@@ -195,6 +197,38 @@ func exportSellerTaxRegistration(out *goblubl.Invoice) {
 		if pts.TaxScheme != nil {
 			pts.TaxScheme.ID.Value = taxSchemeOutsideVAT
 		}
+	}
+}
+
+// exportPartyOIB writes each OIB identity that is a party identifier of the
+// seller or the buyer (BT-29, BT-46) the way the HR CIUS gives it: 9934:<OIB>,
+// with no scheme identifier. The identifier's scheme takes only ISO 6523 ICD
+// codes (BR-CL-10), and 9934 is an electronic address scheme (EAS) code, so
+// the HR CIUS puts it in front of the OIB instead. gobl.ubl writes the bare
+// OIB, with the identity type as the scheme when it has no extensions.
+//
+// gobl.ubl writes one party identifier for each identity, in order, except
+// the tax registrations and the first legal registration (BT-30), and adds
+// any other identifier, such as the SEPA creditor identifier (BT-90), after
+// them.
+func exportPartyOIB(party *org.Party, p *goblubl.Party) {
+	if party == nil || p == nil {
+		return
+	}
+	i := 0
+	legal := false
+	for _, id := range party.Identities {
+		switch {
+		case id.Scope == org.IdentityScopeTax:
+			continue
+		case id.Scope == org.IdentityScopeLegal && !legal:
+			legal = true
+			continue
+		}
+		if id.Type == hr.IdentityTypeOIB && i < len(p.PartyIdentification) {
+			p.PartyIdentification[i].ID = &goblubl.IDType{Value: eracun.SchemeIDOIB + ":" + id.Code.String()}
+		}
+		i++
 	}
 }
 

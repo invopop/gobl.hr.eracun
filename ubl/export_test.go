@@ -442,6 +442,105 @@ func TestSellerTaxRegistrationScheme(t *testing.T) {
 	assert.Equal(t, []string{"VAT", "LOC"}, schemes)
 }
 
+// TestExportPartyOIB checks that an OIB identity of the seller or the buyer
+// written as a party identifier (BT-29, BT-46) takes the HR CIUS form,
+// 9934:<OIB> with no scheme, and that an OIB written as the legal
+// registration (BT-30) or the tax registration (BT-32) keeps its code.
+func TestExportPartyOIB(t *testing.T) {
+	t.Run("seller and buyer identifiers", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+		inv.Customer.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}}
+		doc := exportTestInvoice(t, inv)
+		assert.Equal(t, []goblubl.IDType{{Value: "9934:12345678903"}}, partyIDs(doc.AccountingSupplierParty.Party))
+		assert.Equal(t, []goblubl.IDType{{Value: "9934:11111111119"}}, partyIDs(doc.AccountingCustomerParty.Party))
+	})
+
+	t.Run("among other identifiers", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Supplier.Identities = []*org.Identity{
+			{Scope: org.IdentityScopeLegal, Code: "080000001"},
+			{Scope: org.IdentityScopeTax, Code: "12345678903"},
+			{Code: "PJ-1"},
+			{Type: hr.IdentityTypeOIB, Code: "12345678903"},
+		}
+		inv.Payment.Instructions = &pay.Instructions{
+			Key:         pay.MeansKeyDirectDebit,
+			DirectDebit: &pay.DirectDebit{Ref: "M-1", Creditor: "HR11ZZZ12345678903", Account: "HR1210010051863000160"},
+		}
+		doc := exportTestInvoice(t, inv)
+		sepa := "SEPA"
+		assert.Equal(t, []goblubl.IDType{
+			{Value: "PJ-1"},
+			{Value: "9934:12345678903"},
+			{Value: "HR11ZZZ12345678903", SchemeID: &sepa},
+		}, partyIDs(doc.AccountingSupplierParty.Party))
+	})
+
+	t.Run("legal and tax registrations", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Supplier.TaxID = nil
+		inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
+		inv.Supplier.Identities = []*org.Identity{
+			{Scope: org.IdentityScopeLegal, Type: hr.IdentityTypeOIB, Code: "12345678903"},
+			{Scope: org.IdentityScopeTax, Type: hr.IdentityTypeOIB, Code: "12345678903"},
+		}
+		doc := exportTestInvoice(t, inv)
+		p := doc.AccountingSupplierParty.Party
+		assert.Empty(t, p.PartyIdentification)
+		require.NotNil(t, p.PartyLegalEntity)
+		assert.Equal(t, &goblubl.IDType{Value: "12345678903"}, p.PartyLegalEntity.CompanyID)
+		require.Len(t, p.PartyTaxScheme, 1)
+		assert.Equal(t, "12345678903", p.PartyTaxScheme[0].CompanyID.Value)
+		assert.Equal(t, "FRE", p.PartyTaxScheme[0].TaxScheme.ID.Value)
+	})
+
+	t.Run("passes the rules and imports back", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+		inv.Customer.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}}
+		env, err := gobl.Envelop(inv)
+		require.NoError(t, err)
+		require.NoError(t, env.Calculate())
+		require.NoError(t, env.Validate())
+		out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+		require.NoError(t, err)
+		data, err := goblubl.Encode(out)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "<cbc:ID>9934:12345678903</cbc:ID>")
+		assert.Contains(t, string(data), "<cbc:ID>9934:11111111119</cbc:ID>")
+		if *validate {
+			validateXML(t, phormClient(t), hrubl.FormatHRCIUS.VESID(env.Extract()), data)
+		}
+
+		// The import keeps the identifier as it is, with no type, and the
+		// export writes it back unchanged.
+		in, err := goblubl.Decode(data)
+		require.NoError(t, err)
+		env2, err := goblubl.Import(in)
+		require.NoError(t, err)
+		require.NoError(t, env2.Validate())
+		inv2 := env2.Extract().(*bill.Invoice)
+		assert.Equal(t, []*org.Identity{{Code: "9934:12345678903"}}, inv2.Supplier.Identities)
+		assert.Equal(t, []*org.Identity{{Code: "9934:11111111119"}}, inv2.Customer.Identities)
+
+		out2, err := goblubl.Export(env2, goblubl.WithFormat(hrubl.FormatHRCIUS))
+		require.NoError(t, err)
+		data2, err := goblubl.Encode(out2)
+		require.NoError(t, err)
+		assert.Equal(t, string(data), string(data2))
+	})
+}
+
+// partyIDs provides the party identifiers of a UBL party.
+func partyIDs(p *goblubl.Party) []goblubl.IDType {
+	var ids []goblubl.IDType
+	for _, pi := range p.PartyIdentification {
+		ids = append(ids, *pi.ID)
+	}
+	return ids
+}
+
 // TestLineExemptionReason checks that a line's exemption reason (HR-BT-13)
 // that isn't the VAT breakdown's comes back.
 func TestLineExemptionReason(t *testing.T) {
