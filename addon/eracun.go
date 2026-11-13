@@ -72,8 +72,13 @@ func newAddon() *tax.AddonDef {
 				Act allows it, the operator's OIB may be the supplier's own. The
 				operator is not the seller's contact. Correcting an invoice with GOBL
 				leaves out the original operator, so the corrective document needs its
-				own. Parties with a Croatian tax ID and no ISO 6523 endpoint are given
-				the eRačun network address 9934:<OIB>.
+				own.
+
+				A supplier outside the VAT system, such as a small taxpayer, has a tax
+				ID with only the country HR and its OIB as an identity of type OIB,
+				and must not charge VAT. Parties with an OIB, from an OIB identity or
+				a Croatian VAT number, and no ISO 6523 endpoint are given the eRačun
+				network address 9934:<OIB>.
 
 				An invoice with no issue time, dated today or not dated at all, is
 				given the current date and time in Croatia. An invoice dated another

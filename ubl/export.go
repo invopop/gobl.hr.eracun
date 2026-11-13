@@ -47,7 +47,7 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 		return err
 	}
 	exportSellerContactPoint(inv, out)
-	exportSellerTaxRegistration(out)
+	exportSellerTaxRegistration(inv, out)
 	exportPaymentMeansText(inv, out)
 	removeOrderReferenceFiller(inv, out)
 	if err := exportLineTaxCategories(inv, out); err != nil {
@@ -178,10 +178,13 @@ func exportSellerContactPoint(inv *bill.Invoice, out *goblubl.Invoice) {
 // (BT-32), which the HR CIUS uses for a seller outside the VAT system.
 const taxSchemeOutsideVAT = "FRE"
 
-// exportSellerTaxRegistration gives the tax registration (BT-32) of a seller
-// outside the VAT system, one without a VAT identifier (BT-31), the tax
-// scheme the HR CIUS uses, where gobl.ubl writes LOC.
-func exportSellerTaxRegistration(out *goblubl.Invoice) {
+// exportSellerTaxRegistration writes the tax registration (BT-32) of a
+// seller outside the VAT system, one without a VAT identifier (BT-31), with
+// the tax scheme the HR CIUS uses. gobl.ubl writes each identity with the tax
+// scope there, with its type or LOC as the scheme, and nothing for an OIB
+// identity with the legal scope, so the OIB is added when it isn't there. An
+// HR seller's tax registration is its OIB (HR-BR-53).
+func exportSellerTaxRegistration(inv *bill.Invoice, out *goblubl.Invoice) {
 	p := out.AccountingSupplierParty.Party
 	if p == nil {
 		return
@@ -191,10 +194,24 @@ func exportSellerTaxRegistration(out *goblubl.Invoice) {
 			return
 		}
 	}
+	oib := cbc.CodeEmpty
+	if !eracun.PartyHasVATNumber(inv.Supplier) {
+		oib = eracun.PartyOIB(inv.Supplier)
+	}
+	written := false
 	for _, pts := range p.PartyTaxScheme {
 		if pts.TaxScheme != nil {
 			pts.TaxScheme.ID.Value = taxSchemeOutsideVAT
 		}
+		if pts.CompanyID != nil && eracun.NormalizeOIB(pts.CompanyID.Value) == oib {
+			written = true
+		}
+	}
+	if oib != cbc.CodeEmpty && !written {
+		p.PartyTaxScheme = append(p.PartyTaxScheme, goblubl.PartyTaxScheme{
+			CompanyID: &goblubl.IDType{Value: oib.String()},
+			TaxScheme: &goblubl.TaxScheme{ID: goblubl.IDType{Value: taxSchemeOutsideVAT}},
+		})
 	}
 }
 

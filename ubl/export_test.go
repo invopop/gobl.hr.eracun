@@ -530,3 +530,143 @@ func TestImportRefusesUnpairedLines(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "2 in UBL and 1 in GOBL")
 }
+
+// outsideVATInvoice is testInvoice from a supplier outside the VAT system: a
+// tax ID with only the country HR, its OIB as an identity, and no VAT.
+func outsideVATInvoice() *bill.Invoice {
+	inv := testInvoice()
+	inv.Tags = tax.Tags{}
+	inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
+	inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+	for _, l := range inv.Lines {
+		l.Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
+	}
+	inv.Discounts = nil
+	return inv
+}
+
+// TestSellerOutsideVAT checks the parties of a seller outside the VAT system,
+// as in the official example "eRacun-Nije u sustavu PDV": its OIB as the
+// legal registration (BT-30) and as the tax registration (BT-32) with the
+// scheme FRE, and no VAT identifier (BT-31).
+func TestSellerOutsideVAT(t *testing.T) {
+	doc := exportTestInvoice(t, outsideVATInvoice())
+	p := doc.AccountingSupplierParty.Party
+	require.Len(t, p.PartyTaxScheme, 1)
+	assert.Equal(t, "12345678903", p.PartyTaxScheme[0].CompanyID.Value)
+	assert.Equal(t, "FRE", p.PartyTaxScheme[0].TaxScheme.ID.Value)
+	require.NotNil(t, p.PartyLegalEntity)
+	require.NotNil(t, p.PartyLegalEntity.CompanyID)
+	assert.Equal(t, "12345678903", p.PartyLegalEntity.CompanyID.Value)
+	assert.Nil(t, p.PartyLegalEntity.CompanyID.SchemeID)
+	assert.Empty(t, p.PartyIdentification)
+	require.NotNil(t, p.EndpointID)
+	assert.Equal(t, "9934", p.EndpointID.SchemeID)
+	assert.Equal(t, "12345678903", p.EndpointID.Value)
+}
+
+// importExample imports one of the official examples in testdata/hr, after
+// edit changes the decoded UBL.
+func importExample(t *testing.T, name string, edit func(*goblubl.Invoice)) *bill.Invoice {
+	t.Helper()
+	data, err := os.ReadFile("testdata/hr/" + name + ".xml")
+	require.NoError(t, err)
+	doc, err := goblubl.Decode(data)
+	require.NoError(t, err)
+	if edit != nil {
+		ublInv, ok := doc.(*goblubl.Invoice)
+		require.True(t, ok)
+		edit(ublInv)
+	}
+	env, err := goblubl.Import(doc)
+	require.NoError(t, err)
+	require.NoError(t, env.Calculate())
+	require.NoError(t, env.Validate())
+	inv, ok := env.Extract().(*bill.Invoice)
+	require.True(t, ok)
+	return inv
+}
+
+// TestImportSellerOutsideVAT checks that a seller outside the VAT system
+// comes in as the party the addons take: a tax ID with only the country HR,
+// which keeps the regime, and one OIB identity in place of BT-30 and BT-32.
+func TestImportSellerOutsideVAT(t *testing.T) {
+	inv := importExample(t, "eRacun-Nije u sustavu PDV", nil)
+	assert.Equal(t, "HR", inv.GetRegime().String())
+	assert.Equal(t, &tax.Identity{Country: "HR"}, inv.Supplier.TaxID)
+	assert.Equal(t, []*org.Identity{{Type: hr.IdentityTypeOIB, Scope: org.IdentityScopeLegal, Code: "12345678903"}}, inv.Supplier.Identities)
+}
+
+// TestImportSellerTaxRegistrationBesideLegalID checks a seller whose legal
+// registration (BT-30) is not its OIB: the OIB keeps the tax scope, so the
+// export writes both back where they were.
+func TestImportSellerTaxRegistrationBesideLegalID(t *testing.T) {
+	inv := importExample(t, "eRacun-Nije u sustavu PDV", func(doc *goblubl.Invoice) {
+		doc.AccountingSupplierParty.Party.PartyLegalEntity.CompanyID.Value = "080000001"
+	})
+	oib := org.IdentityForType(inv.Supplier.Identities, hr.IdentityTypeOIB)
+	require.NotNil(t, oib)
+	assert.Equal(t, org.IdentityScopeTax, oib.Scope)
+	doc := exportTestInvoice(t, inv)
+	p := doc.AccountingSupplierParty.Party
+	assert.Equal(t, "080000001", p.PartyLegalEntity.CompanyID.Value)
+	require.Len(t, p.PartyTaxScheme, 1)
+	assert.Equal(t, "12345678903", p.PartyTaxScheme[0].CompanyID.Value)
+	assert.Equal(t, "FRE", p.PartyTaxScheme[0].TaxScheme.ID.Value)
+}
+
+// TestSellerOutsideVATKeepsOIBInTaxRegistration checks that the OIB is the
+// seller's tax registration (BT-32) even when it has another identity with
+// the tax scope.
+func TestSellerOutsideVATKeepsOIBInTaxRegistration(t *testing.T) {
+	inv := outsideVATInvoice()
+	inv.Supplier.Identities = append(inv.Supplier.Identities, &org.Identity{Scope: org.IdentityScopeTax, Code: "XYZ123"})
+	doc := exportTestInvoice(t, inv)
+	var ids []string
+	for _, pts := range doc.AccountingSupplierParty.Party.PartyTaxScheme {
+		assert.Equal(t, "FRE", pts.TaxScheme.ID.Value)
+		ids = append(ids, pts.CompanyID.Value)
+	}
+	assert.Contains(t, ids, "12345678903")
+}
+
+// TestSellerOutsideVATBesideLegalID checks a seller whose legal registration
+// (BT-30) is another number: the OIB goes only to its tax registration
+// (BT-32), and never to a party identification.
+func TestSellerOutsideVATBesideLegalID(t *testing.T) {
+	inv := outsideVATInvoice()
+	inv.Supplier.Identities = append(inv.Supplier.Identities, &org.Identity{Scope: org.IdentityScopeLegal, Code: "080000001"})
+	p := exportTestInvoice(t, inv).AccountingSupplierParty.Party
+	assert.Equal(t, "080000001", p.PartyLegalEntity.CompanyID.Value)
+	require.Len(t, p.PartyTaxScheme, 1)
+	assert.Equal(t, "12345678903", p.PartyTaxScheme[0].CompanyID.Value)
+	assert.Equal(t, "FRE", p.PartyTaxScheme[0].TaxScheme.ID.Value)
+	assert.Empty(t, p.PartyIdentification)
+}
+
+// TestImportSellerTaxRegistrationWithPrefix checks that BT-30 and BT-32 are
+// taken for the same OIB when BT-32 is written with the HR prefix.
+func TestImportSellerTaxRegistrationWithPrefix(t *testing.T) {
+	inv := importExample(t, "eRacun-Nije u sustavu PDV", func(doc *goblubl.Invoice) {
+		doc.AccountingSupplierParty.Party.PartyTaxScheme[0].CompanyID.Value = "HR12345678903"
+	})
+	assert.Equal(t, []*org.Identity{{Type: hr.IdentityTypeOIB, Scope: org.IdentityScopeLegal, Code: "12345678903"}}, inv.Supplier.Identities)
+}
+
+// TestImportForeignSellerTaxRegistration checks that a seller outside
+// Croatia keeps its tax registration as it came: it is not an OIB.
+func TestImportForeignSellerTaxRegistration(t *testing.T) {
+	data, err := os.ReadFile("testdata/hr/eRacun-Nije u sustavu PDV.xml")
+	require.NoError(t, err)
+	doc, err := goblubl.Decode(data)
+	require.NoError(t, err)
+	ublInv, ok := doc.(*goblubl.Invoice)
+	require.True(t, ok)
+	ublInv.AccountingSupplierParty.Party.PostalAddress.Country.IdentificationCode = "DE"
+	env, err := goblubl.Import(doc)
+	require.NoError(t, err)
+	inv, ok := env.Extract().(*bill.Invoice)
+	require.True(t, ok)
+	assert.Nil(t, inv.Supplier.TaxID)
+	assert.Nil(t, org.IdentityForType(inv.Supplier.Identities, hr.IdentityTypeOIB))
+}

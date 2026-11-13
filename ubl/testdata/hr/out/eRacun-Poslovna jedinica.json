@@ -37,11 +37,6 @@
 				]
 			}
 		],
-		"endpoints": [
-			{
-				"uri": "iso6523-actorid-upis::9934:12345678903"
-			}
-		],
 		"inboxes": [
 			{
 				"scheme": "9934",
@@ -70,11 +65,6 @@
 		"identities": [
 			{
 				"code": "9934:11111111119::HR99:šifra poslovne jedinice"
-			}
-		],
-		"endpoints": [
-			{
-				"uri": "iso6523-actorid-upis::9934:11111111119"
 			}
 		],
 		"inboxes": [

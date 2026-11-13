@@ -78,6 +78,32 @@ The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
 invoice is paid. The regime adds the legal VAT note, and the UBL export writes
 `HRObracunPDVPoNaplati`.
 
+## Supplier
+
+A supplier in the VAT system gives its Croatian VAT number in `tax_id`, and
+the export writes it as the seller's VAT identifier (BT-31), `HR<OIB>`. A
+supplier outside the VAT system, such as a small taxpayer, has no VAT number:
+its `tax_id` has only the country, which keeps the regime, and its OIB goes in
+an `OIB` identity:
+
+```yaml
+supplier:
+  tax_id:
+    country: "HR"
+  identities:
+    - type: OIB
+      code: "12345678903"
+```
+
+The export writes that OIB as the seller's legal registration (BT-30), as its
+tax registration (BT-32) with the scheme `FRE`, and as its eRačun address
+`9934:<OIB>`, as in the official example "eRacun-Nije u sustavu PDV". An `OIB`
+identity with no scope gets the legal scope, unless another identity already
+has it. The invoice must not charge VAT, and its S, Z, E and AE taxes need the
+`OIB` identity. Importing an eRačun with a BT-32 and no BT-31 gives the same
+supplier. The `hr-fiskal-b2c-v1` addon takes the same party, and gobl.fr.ctc
+models a French supplier the same way, with a SIREN identity.
+
 ## Operator
 
 An eRačun names its operator, the person who issued it: a label in

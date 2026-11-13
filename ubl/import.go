@@ -1,6 +1,7 @@
 package ubl
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/invopop/gobl"
@@ -9,6 +10,7 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/catalogues/untdid"
 	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/regimes/hr"
 	"github.com/invopop/gobl/tax"
@@ -25,6 +27,7 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 		setTaxExt(inv, eracun.ExtKeyProcess, cbc.Code(in.ProfileID.Value))
 	}
 	importOperator(in, inv)
+	importSellerTaxRegistration(in, inv)
 	importPaymentMeansText(in, inv)
 	lines, err := pairedLines(inv, in)
 	if err != nil {
@@ -177,4 +180,61 @@ func setPassThroughTaxCategory(ts tax.Set, name *string) {
 	if c.In(eracun.PassThroughTaxCategories...) {
 		tc.Ext = tc.Ext.Set(eracun.ExtKeyTaxCategory, c)
 	}
+}
+
+// importSellerTaxRegistration reads a Croatian seller outside the VAT system,
+// one with a tax registration (BT-32) and no VAT identifier (BT-31), as the
+// party the
+// addons take: a tax ID with only the country HR, which keeps the regime,
+// and its OIB as an identity of type OIB. gobl.ubl reads BT-32 as an identity
+// with the tax scope, and BT-30 as one with the legal scope, and an HR
+// seller's tax registration is its OIB (HR-BR-53). When BT-30 holds the same
+// OIB, the two become one identity with the legal scope; otherwise the OIB
+// keeps the tax scope, so the export writes both back where they were.
+func importSellerTaxRegistration(in *goblubl.Invoice, inv *bill.Invoice) {
+	sup := inv.Supplier
+	p := in.AccountingSupplierParty.Party
+	if sup == nil || p == nil || sup.TaxID != nil || !croatianAddress(p) {
+		return
+	}
+	oib := cbc.CodeEmpty
+	for _, pts := range p.PartyTaxScheme {
+		if pts.TaxScheme == nil || pts.CompanyID == nil {
+			continue
+		}
+		if pts.TaxScheme.ID.Value == goblubl.TaxSchemeVAT {
+			return
+		}
+		if oib == cbc.CodeEmpty {
+			oib = eracun.NormalizeOIB(pts.CompanyID.Value)
+		}
+	}
+	if oib == cbc.CodeEmpty {
+		return
+	}
+	sup.TaxID = &tax.Identity{Country: l10n.HR.Tax()}
+	isOIB := func(id *org.Identity) bool {
+		return id != nil && eracun.NormalizeOIB(id.Code.String()) == oib
+	}
+	sup.Identities = slices.DeleteFunc(sup.Identities, func(id *org.Identity) bool {
+		return isOIB(id) && id.Scope == org.IdentityScopeTax && id.Type == cbc.CodeEmpty
+	})
+	scope := org.IdentityScopeLegal
+	for _, id := range sup.Identities {
+		if id == nil || !id.Scope.Has(org.IdentityScopeLegal) {
+			continue
+		}
+		if isOIB(id) && id.Type == cbc.CodeEmpty {
+			id.Type = hr.IdentityTypeOIB
+			return
+		}
+		scope = org.IdentityScopeTax
+	}
+	sup.Identities = append(sup.Identities, &org.Identity{Type: hr.IdentityTypeOIB, Scope: scope, Code: oib})
+}
+
+// croatianAddress says whether the party's postal address is in Croatia.
+func croatianAddress(p *goblubl.Party) bool {
+	return p.PostalAddress != nil && p.PostalAddress.Country != nil &&
+		p.PostalAddress.Country.IdentificationCode == l10n.HR.String()
 }

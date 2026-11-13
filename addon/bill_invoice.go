@@ -82,6 +82,7 @@ func normalizeInvoice(inv *bill.Invoice) {
 		return
 	}
 	normalizeIssueTime(inv)
+	assignOIBScope(inv.Supplier)
 	normalizePartyEndpoint(inv.Supplier)
 	normalizePartyEndpoint(inv.Customer)
 }
@@ -104,23 +105,30 @@ func normalizeIssueTime(inv *bill.Invoice) {
 	inv.IssueTime = &t
 }
 
-// normalizePartyEndpoint gives a party with a Croatian tax ID its eRačun
-// network address, 9934:<OIB>, unless it already has an ISO 6523 endpoint.
+// normalizePartyEndpoint gives a party with an OIB its eRačun network
+// address, 9934:<OIB>, unless it already has an ISO 6523 address: an
+// endpoint, or an inbox with a scheme, which the export writes otherwise.
+// The OIB is the party's Croatian VAT number or its OIB identity.
 func normalizePartyEndpoint(p *org.Party) {
-	if p == nil || p.TaxID == nil || p.TaxID.Country != l10n.HR.Tax() {
+	if p == nil || p.Endpoint(iso.ActorIDScheme) != nil || hasSchemeInbox(p) {
 		return
 	}
-	if p.Endpoint(iso.ActorIDScheme) != nil {
-		return
-	}
-	tID := *p.TaxID
-	tax.NormalizeIdentity(&tID)
-	if tID.Code == cbc.CodeEmpty {
+	oib := PartyOIB(p)
+	if oib == cbc.CodeEmpty {
 		return
 	}
 	p.Endpoints = append(p.Endpoints, &org.Endpoint{
-		URI: cbc.URI(iso.ActorIDScheme + "::" + SchemeIDOIB + ":" + tID.Code.String()),
+		URI: cbc.URI(iso.ActorIDScheme + "::" + SchemeIDOIB + ":" + oib.String()),
 	})
+}
+
+func hasSchemeInbox(p *org.Party) bool {
+	for _, ib := range p.Inboxes {
+		if ib != nil && ib.Scheme != cbc.CodeEmpty {
+			return true
+		}
+	}
+	return false
 }
 
 func billInvoiceRules() *rules.Set {
@@ -143,7 +151,7 @@ func billInvoiceRules() *rules.Set {
 			),
 		),
 		rules.Field("supplier",
-			rules.Assert("05", "invoice supplier requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (HR-BR-7)",
+			rules.Assert("05", "invoice supplier requires an eRačun address registered in AMS: an OIB, from a Croatian VAT number or an OIB identity, or an ISO 6523 endpoint, not an email (HR-BR-7)",
 				is.Func("has endpoint", partyHasEndpoint),
 			),
 			rules.Field("people",
@@ -176,6 +184,25 @@ func billInvoiceRules() *rules.Set {
 					rules.Assert("10", "invoice customer tax ID is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					rules.Field("code",
 						rules.Assert("11", "invoice customer tax ID code is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
+					),
+				),
+			),
+		),
+		// A supplier with a tax ID with only the country HR has no VAT number:
+		// it is outside the VAT system. The HR schematron accepts its tax
+		// registration (BT-32) wherever a seller tax ID is required, so these
+		// rules are the only check that it charges no VAT and that the export
+		// has its OIB to write there.
+		rules.When(is.Func("supplier outside the VAT system", supplierOutsideVAT),
+			rules.Field("totals",
+				rules.Assert("13", "invoice from a supplier with no VAT number (supplier tax ID code), outside the VAT system, must not charge VAT (Art. 90.g of the VAT Act)",
+					is.Func("charges no VAT", totalsChargeNoVAT),
+				),
+			),
+			rules.Field("supplier",
+				rules.Field("identities",
+					rules.Assert("14", "invoice supplier with no VAT number requires an identity of type OIB: its legal and tax registration (BT-30, BT-32)",
+						is.Func("has OIB", identitiesHaveOIB),
 					),
 				),
 			),

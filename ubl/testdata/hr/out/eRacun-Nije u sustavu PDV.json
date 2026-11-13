@@ -1,4 +1,5 @@
 {
+	"$regime": "HR",
 	"$addons": [
 		"eu-en16931-v2017",
 		"hr-eracun-v1"
@@ -28,14 +29,13 @@
 	},
 	"supplier": {
 		"name": "TVRTKA A d.o.o.",
+		"tax_id": {
+			"country": "HR"
+		},
 		"identities": [
 			{
 				"scope": "legal",
-				"code": "12345678903"
-			},
-			{
-				"scope": "tax",
-				"country": "HR",
+				"type": "OIB",
 				"code": "12345678903"
 			}
 		],
@@ -77,11 +77,6 @@
 			"country": "HR",
 			"code": "11111111119"
 		},
-		"endpoints": [
-			{
-				"uri": "iso6523-actorid-upis::9934:11111111119"
-			}
-		],
 		"inboxes": [
 			{
 				"scheme": "9934",
