@@ -1,0 +1,146 @@
+{
+	"$schema": "https://gobl.org/draft-0/envelope",
+	"head": {
+		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
+		"dig": {
+			"alg": "sha256",
+			"val": "7f13ed9c5258c7ace79e57a370f84c3083ecc55ca8d7cae257ad8995ef3b6dcf"
+		},
+		"from": "iso6523-actorid-upis::9934:12345678903",
+		"to": "iso6523-actorid-upis::9934:11111111119"
+	},
+	"doc": {
+		"$schema": "https://gobl.org/draft-0/bill/invoice",
+		"$regime": "HR",
+		"$addons": [
+			"eu-en16931-v2017",
+			"hr-eracun-v1"
+		],
+		"uuid": "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a3",
+		"type": "credit-note",
+		"code": "2-P1-1",
+		"issue_date": "2026-12-10",
+		"issue_time": "12:00:00",
+		"currency": "EUR",
+		"preceding": [
+			{
+				"issue_date": "2026-12-01",
+				"code": "1-P1-1"
+			}
+		],
+		"tax": {
+			"ext": {
+				"hr-eracun-process": "P10",
+				"untdid-document-type": "381"
+			}
+		},
+		"supplier": {
+			"name": "TVRTKA A d.o.o.",
+			"tax_id": {
+				"country": "HR",
+				"code": "12345678903"
+			},
+			"people": [
+				{
+					"key": "operator",
+					"name": {
+						"given": "Ivan",
+						"surname": "Horvat"
+					},
+					"identities": [
+						{
+							"type": "OIB",
+							"code": "22222222226"
+						}
+					]
+				}
+			],
+			"endpoints": [
+				{
+					"uri": "iso6523-actorid-upis::9934:12345678903"
+				}
+			],
+			"addresses": [
+				{
+					"street": "Ulica 1",
+					"locality": "Zagreb",
+					"code": "10000",
+					"country": "HR"
+				}
+			]
+		},
+		"customer": {
+			"name": "Tvrtka B d.o.o.",
+			"tax_id": {
+				"country": "HR",
+				"code": "11111111119"
+			},
+			"endpoints": [
+				{
+					"uri": "iso6523-actorid-upis::9934:11111111119"
+				}
+			],
+			"addresses": [
+				{
+					"street": "Ulica 2",
+					"locality": "Rijeka",
+					"code": "51000",
+					"country": "HR"
+				}
+			]
+		},
+		"lines": [
+			{
+				"i": 1,
+				"quantity": "1",
+				"item": {
+					"name": "Proizvod",
+					"price": "100.00",
+					"unit": "piece"
+				},
+				"sum": "100.00",
+				"taxes": [
+					{
+						"cat": "VAT",
+						"key": "standard",
+						"rate": "general",
+						"percent": "25.0%",
+						"ext": {
+							"hr-eracun-tax-category": "PDV25",
+							"untdid-tax-category": "S"
+						}
+					}
+				],
+				"total": "100.00"
+			}
+		],
+		"totals": {
+			"sum": "100.00",
+			"total": "100.00",
+			"taxes": {
+				"categories": [
+					{
+						"code": "VAT",
+						"rates": [
+							{
+								"key": "standard",
+								"ext": {
+									"hr-eracun-tax-category": "PDV25",
+									"untdid-tax-category": "S"
+								},
+								"base": "100.00",
+								"percent": "25.0%",
+								"amount": "25.00"
+							}
+						],
+						"amount": "25.00"
+					}
+				],
+				"sum": "25.00"
+			},
+			"tax": "25.00",
+			"total_with_tax": "125.00",
+			"payable": "125.00"
+		}
+	}
+}

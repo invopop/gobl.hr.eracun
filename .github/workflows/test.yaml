@@ -1,0 +1,74 @@
+name: Test Go
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - main
+  pull_request:
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    services:
+      # Schematron validation service. The image bundles every rule set, so it
+      # is large and slow to boot - hence the readiness loop below. 2.2.11 is
+      # the first release with the HR rules 1.0.4.
+      phorm:
+        image: phelger/phorm:2.2.11
+        ports:
+          - 8080:8080
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Install Dependencies
+        env:
+          GOPROXY: https://proxy.golang.org,direct
+        run: go mod download
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Wait for phorm
+        run: |
+          for i in $(seq 1 120); do
+            curl -sf http://localhost:8080/ >/dev/null && exit 0
+            sleep 2
+          done
+          echo "phorm did not become ready" >&2
+          exit 1
+
+      # The -validate and -xsd flags are declared in the ubl package alone, so
+      # the runs have to be scoped to it: any wider pattern builds a test
+      # binary that rejects the flags.
+      - name: Schematron
+        env:
+          PHORM_URL: http://localhost:8080
+        run: go test ./ubl/ -validate
+
+      # phorm has no rule set for the HR ApplicationResponse, so it is checked
+      # against the UBL 2.1 schema with xmllint, run in a container.
+      - name: ApplicationResponse schema
+        run: go test ./ubl/ -run TestApplicationResponse -xsd
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
+
+      # Runs once the repo is enabled on Codecov and a CODECOV_TOKEN secret is
+      # added; skipped (keeping the build green) until then.
+      - name: Upload coverage reports to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v5.1.2
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          slug: invopop/gobl.hr.eracun
