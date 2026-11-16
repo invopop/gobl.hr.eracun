@@ -88,6 +88,18 @@ func assignOIBScope(p *org.Party) {
 	}
 }
 
+// vatNumberMatchesOIBIdentity checks that a party with both a VAT number and
+// an OIB identity carries the same OIB in each: when they differ, one of them
+// is a typo. A party with only one of them passes.
+func vatNumberMatchesOIBIdentity(val any) bool {
+	p, ok := val.(*org.Party)
+	if !ok || !PartyHasVATNumber(p) {
+		return true
+	}
+	id := org.IdentityForType(p.Identities, hr.IdentityTypeOIB)
+	return id == nil || NormalizeOIB(id.Code.String()) == PartyOIB(p)
+}
+
 func supplierOutsideVAT(val any) bool {
 	inv, ok := val.(*bill.Invoice)
 	return ok && inv != nil && partyOutsideVAT(inv.Supplier)
