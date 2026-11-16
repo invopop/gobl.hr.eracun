@@ -233,6 +233,39 @@ func TestImportOperatorEmptyID(t *testing.T) {
 	assert.Contains(t, err.Error(), "GOBL-HR-ERACUN-BILL-INVOICE-06")
 }
 
+// TestImportTaxCategoryNeedsHRPrefix checks that a pass-through tax category
+// is read only from a name with the HR-TB-2 prefix, so that a plain "PPMV"
+// sets no HR tax category.
+func TestImportTaxCategoryNeedsHRPrefix(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", "Racun za leasing PDV PPMV-aktivacija.xml"))
+	require.NoError(t, err)
+	labels := func(data []byte) []cbc.Code {
+		t.Helper()
+		doc, err := goblubl.Decode(data)
+		require.NoError(t, err)
+		env, err := goblubl.Import(doc)
+		require.NoError(t, err)
+		inv := env.Extract().(*bill.Invoice)
+		var out []cbc.Code
+		for _, l := range inv.Lines {
+			if tc := l.Taxes.Get(tax.CategoryVAT); tc != nil {
+				out = append(out, tc.Ext.Get(eracun.ExtKeyTaxCategory))
+			}
+		}
+		for _, c := range inv.Charges {
+			if tc := c.Taxes.Get(tax.CategoryVAT); tc != nil {
+				out = append(out, tc.Ext.Get(eracun.ExtKeyTaxCategory))
+			}
+		}
+		return out
+	}
+	assert.Contains(t, labels(data), eracun.TaxLabelPPMV)
+
+	plain := strings.ReplaceAll(string(data), "<cbc:Name>HR:PPMV</cbc:Name>", "<cbc:Name>PPMV</cbc:Name>")
+	require.False(t, strings.Contains(plain, "<cbc:Name>HR:PPMV</cbc:Name>"))
+	assert.NotContains(t, labels([]byte(plain)), eracun.TaxLabelPPMV)
+}
+
 // TestMergedExemptionKeepsVATEX checks that joining the exempt entries of a
 // pass-through amount and an exempt supply keeps the VATEX code of either.
 func TestMergedExemptionKeepsVATEX(t *testing.T) {

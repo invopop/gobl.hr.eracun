@@ -176,7 +176,11 @@ func setPassThroughTaxCategory(ts tax.Set, name *string) {
 	if tc == nil || name == nil {
 		return
 	}
-	c := cbc.Code(strings.TrimPrefix(*name, taxCategoryPrefix))
+	s, ok := strings.CutPrefix(*name, taxCategoryPrefix)
+	if !ok {
+		return
+	}
+	c := cbc.Code(s)
 	if c.In(eracun.PassThroughTaxLabels...) {
 		tc.Ext = tc.Ext.Set(eracun.ExtKeyTaxCategory, c)
 	}
