@@ -22,21 +22,24 @@ const (
 	ExtKeyRejectionReason cbc.Key = "hr-eracun-rejection-reason"
 )
 
-// HR tax categories (HR-TB-2)
+// HR VAT category labels (HR-TB-2, "HR oznaka kategorije PDV-a"), the codes of
+// the ExtKeyTaxCategory extension. They are not GOBL tax categories: POVNAK,
+// PP and PPMV are amounts collected for another tax or fee, outside the VAT
+// base, so TaxLabelPP is not the hr regime's consumption tax category.
 const (
-	TaxCategoryPDV25  cbc.Code = "PDV25"
-	TaxCategoryPDV13  cbc.Code = "PDV13"
-	TaxCategoryPDV5   cbc.Code = "PDV5"
-	TaxCategoryZ      cbc.Code = "Z"
-	TaxCategoryK      cbc.Code = "K"
-	TaxCategoryG      cbc.Code = "G"
-	TaxCategoryAE     cbc.Code = "AE"
-	TaxCategoryE      cbc.Code = "E"
-	TaxCategoryPOVNAK cbc.Code = "POVNAK"
-	TaxCategoryPP     cbc.Code = "PP"
-	TaxCategoryPPMV   cbc.Code = "PPMV"
-	TaxCategoryO      cbc.Code = "O"
-	TaxCategoryN      cbc.Code = "N"
+	TaxLabelPDV25  cbc.Code = "PDV25"
+	TaxLabelPDV13  cbc.Code = "PDV13"
+	TaxLabelPDV5   cbc.Code = "PDV5"
+	TaxLabelZ      cbc.Code = "Z"
+	TaxLabelK      cbc.Code = "K"
+	TaxLabelG      cbc.Code = "G"
+	TaxLabelAE     cbc.Code = "AE"
+	TaxLabelE      cbc.Code = "E"
+	TaxLabelPOVNAK cbc.Code = "POVNAK"
+	TaxLabelPP     cbc.Code = "PP"
+	TaxLabelPPMV   cbc.Code = "PPMV"
+	TaxLabelO      cbc.Code = "O"
+	TaxLabelN      cbc.Code = "N"
 )
 
 // Rejection reasons (VRSTARAZLOGAODBIJANJA)
@@ -46,12 +49,12 @@ const (
 	RejectionReasonO cbc.Code = "O"
 )
 
-// PassThroughTaxCategories are amounts left out of the VAT base: POVNAK, PP
-// and PPMV, which the supplier collects for a third party, and N, any other
-// non-taxable fee charged with taxable items. They are exempt (E) in the
-// EN 16931 core and outside the VAT base (O) in the HR extension.
-var PassThroughTaxCategories = []cbc.Code{
-	TaxCategoryPOVNAK, TaxCategoryPP, TaxCategoryPPMV, TaxCategoryN,
+// PassThroughTaxLabels are the labels of amounts left out of the VAT base:
+// POVNAK, PP and PPMV, which the supplier collects for a third party, and N,
+// any other non-taxable fee charged with taxable items. They are exempt (E) in
+// the EN 16931 core and outside the VAT base (O) in the HR extension.
+var PassThroughTaxLabels = []cbc.Code{
+	TaxLabelPOVNAK, TaxLabelPP, TaxLabelPPMV, TaxLabelN,
 }
 
 var extensions = []*cbc.Definition{
@@ -86,19 +89,19 @@ var extensions = []*cbc.Definition{
 			`),
 		},
 		Values: []*cbc.Definition{
-			{Code: TaxCategoryPDV25, Name: i18n.String{i18n.EN: "VAT 25%", i18n.HR: "PDV 25%"}},
-			{Code: TaxCategoryPDV13, Name: i18n.String{i18n.EN: "VAT 13%", i18n.HR: "PDV 13%"}},
-			{Code: TaxCategoryPDV5, Name: i18n.String{i18n.EN: "VAT 5%", i18n.HR: "PDV 5%"}},
-			{Code: TaxCategoryZ, Name: i18n.String{i18n.EN: "Zero rated", i18n.HR: "Nulta stopa"}},
-			{Code: TaxCategoryK, Name: i18n.String{i18n.EN: "Intra-community supply", i18n.HR: "Isporuka unutar EU"}},
-			{Code: TaxCategoryG, Name: i18n.String{i18n.EN: "Export", i18n.HR: "Izvoz"}},
-			{Code: TaxCategoryAE, Name: i18n.String{i18n.EN: "Reverse charge", i18n.HR: "Prijenos porezne obveze"}},
-			{Code: TaxCategoryE, Name: i18n.String{i18n.EN: "Exempt", i18n.HR: "Oslobođeno PDV-a"}},
-			{Code: TaxCategoryPOVNAK, Name: i18n.String{i18n.EN: "Packaging return fee", i18n.HR: "Povratna naknada"}},
-			{Code: TaxCategoryPP, Name: i18n.String{i18n.EN: "Consumption tax", i18n.HR: "Porez na potrošnju"}},
-			{Code: TaxCategoryPPMV, Name: i18n.String{i18n.EN: "Special tax on motor vehicles", i18n.HR: "Posebni porez na motorna vozila"}},
-			{Code: TaxCategoryO, Name: i18n.String{i18n.EN: "Not subject to VAT", i18n.HR: "Neoporezivo"}},
-			{Code: TaxCategoryN, Name: i18n.String{i18n.EN: "Non-taxable fee", i18n.HR: "Neoporeziva naknada"}},
+			{Code: TaxLabelPDV25, Name: i18n.String{i18n.EN: "VAT 25%", i18n.HR: "PDV 25%"}},
+			{Code: TaxLabelPDV13, Name: i18n.String{i18n.EN: "VAT 13%", i18n.HR: "PDV 13%"}},
+			{Code: TaxLabelPDV5, Name: i18n.String{i18n.EN: "VAT 5%", i18n.HR: "PDV 5%"}},
+			{Code: TaxLabelZ, Name: i18n.String{i18n.EN: "Zero rated", i18n.HR: "Nulta stopa"}},
+			{Code: TaxLabelK, Name: i18n.String{i18n.EN: "Intra-community supply", i18n.HR: "Isporuka unutar EU"}},
+			{Code: TaxLabelG, Name: i18n.String{i18n.EN: "Export", i18n.HR: "Izvoz"}},
+			{Code: TaxLabelAE, Name: i18n.String{i18n.EN: "Reverse charge", i18n.HR: "Prijenos porezne obveze"}},
+			{Code: TaxLabelE, Name: i18n.String{i18n.EN: "Exempt", i18n.HR: "Oslobođeno PDV-a"}},
+			{Code: TaxLabelPOVNAK, Name: i18n.String{i18n.EN: "Packaging return fee", i18n.HR: "Povratna naknada"}},
+			{Code: TaxLabelPP, Name: i18n.String{i18n.EN: "Consumption tax", i18n.HR: "Porez na potrošnju"}},
+			{Code: TaxLabelPPMV, Name: i18n.String{i18n.EN: "Special tax on motor vehicles", i18n.HR: "Posebni porez na motorna vozila"}},
+			{Code: TaxLabelO, Name: i18n.String{i18n.EN: "Not subject to VAT", i18n.HR: "Neoporezivo"}},
+			{Code: TaxLabelN, Name: i18n.String{i18n.EN: "Non-taxable fee", i18n.HR: "Neoporeziva naknada"}},
 		},
 	}, {
 		Key: ExtKeyRejectionReason,

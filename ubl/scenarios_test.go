@@ -129,14 +129,14 @@ var scenarios = []scenario{
 	// Amounts collected for a third party, outside the VAT base (HR-TB-2
 	// labels POVNAK, PP, PPMV and N).
 	{name: "pass-through POVNAK on a line", edit: func(inv *bill.Invoice) {
-		inv.Lines = append(inv.Lines, line("Povratna naknada", 7, passThrough(eracun.TaxCategoryPOVNAK)))
+		inv.Lines = append(inv.Lines, line("Povratna naknada", 7, passThrough(eracun.TaxLabelPOVNAK)))
 		addNote(inv, tax.KeyExempt, "Povratna naknada")
 	}, check: lineLabel(1, "HR:POVNAK")},
 	{name: "pass-through PP charge", edit: func(inv *bill.Invoice) {
 		inv.Charges = []*bill.Charge{{
 			Reason: "Porez na potrošnju",
 			Amount: num.MakeAmount(300, 2),
-			Taxes:  tax.Set{passThrough(eracun.TaxCategoryPP)},
+			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
 		}}
 		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
 	}},
@@ -145,7 +145,7 @@ var scenarios = []scenario{
 		inv.Charges = []*bill.Charge{{
 			Reason: "Porez na potrošnju",
 			Amount: num.MakeAmount(300, 2),
-			Taxes:  tax.Set{passThrough(eracun.TaxCategoryPP)},
+			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
 		}}
 		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
 	},

@@ -24,9 +24,9 @@ const taxCategoryPrefix = "HR:"
 // VAT base that belong to another tax, as the HR extension breaks them down.
 // The others, such as a non-taxable fee (N), keep VAT.
 var passThroughTaxSchemes = map[cbc.Code]string{
-	eracun.TaxCategoryPP:     "LOC",
-	eracun.TaxCategoryPOVNAK: "OTH",
-	eracun.TaxCategoryPPMV:   "CAR",
+	eracun.TaxLabelPP:     "LOC",
+	eracun.TaxLabelPOVNAK: "OTH",
+	eracun.TaxLabelPPMV:   "CAR",
 }
 
 // exportHR applies the HR CIUS rules to an exported invoice.
@@ -371,7 +371,7 @@ func hrTotals(inv *bill.Invoice, vat *tax.CategoryTotal) (*HRTaxTotal, *HRLegalM
 			Percent:     "0",
 			HRTaxScheme: HRTaxScheme{ID: goblubl.TaxSchemeVAT},
 		}
-		if label.In(eracun.PassThroughTaxCategories...) {
+		if label.In(eracun.PassThroughTaxLabels...) {
 			cat.ID = en16931.TaxCategoryOutsideScope.String()
 			if scheme, ok := passThroughTaxSchemes[label]; ok {
 				cat.HRTaxScheme.ID = scheme

@@ -16,19 +16,19 @@ var standardTaxCategories = []struct {
 	percent  num.Percentage
 	category cbc.Code
 }{
-	{tax.RateGeneral, num.MakePercentage(25, 2), TaxCategoryPDV25},
-	{tax.RateReduced, num.MakePercentage(13, 2), TaxCategoryPDV13},
-	{tax.RateSuperReduced, num.MakePercentage(5, 2), TaxCategoryPDV5},
+	{tax.RateGeneral, num.MakePercentage(25, 2), TaxLabelPDV25},
+	{tax.RateReduced, num.MakePercentage(13, 2), TaxLabelPDV13},
+	{tax.RateSuperReduced, num.MakePercentage(5, 2), TaxLabelPDV5},
 }
 
 // keyTaxCategories maps the other VAT keys to their HR tax category.
 var keyTaxCategories = map[cbc.Key]cbc.Code{
-	tax.KeyZero:           TaxCategoryZ,
-	tax.KeyIntraCommunity: TaxCategoryK,
-	tax.KeyExport:         TaxCategoryG,
-	tax.KeyReverseCharge:  TaxCategoryAE,
-	tax.KeyExempt:         TaxCategoryE,
-	tax.KeyOutsideScope:   TaxCategoryO,
+	tax.KeyZero:           TaxLabelZ,
+	tax.KeyIntraCommunity: TaxLabelK,
+	tax.KeyExport:         TaxLabelG,
+	tax.KeyReverseCharge:  TaxLabelAE,
+	tax.KeyExempt:         TaxLabelE,
+	tax.KeyOutsideScope:   TaxLabelO,
 }
 
 // normalizeTaxCombo sets the HR tax category of a VAT combo from its key and
@@ -37,7 +37,7 @@ func normalizeTaxCombo(tc *tax.Combo) {
 	if tc == nil || tc.Category != tax.CategoryVAT {
 		return
 	}
-	if tc.Ext.Get(ExtKeyTaxCategory).In(PassThroughTaxCategories...) {
+	if tc.Ext.Get(ExtKeyTaxCategory).In(PassThroughTaxLabels...) {
 		return
 	}
 	if c := taxCategoryFor(tc); c != cbc.CodeEmpty {
@@ -88,5 +88,5 @@ func taxComboIsVAT(val any) bool {
 
 func taxComboIsPassThrough(val any) bool {
 	tc, ok := val.(*tax.Combo)
-	return ok && tc != nil && tc.Ext.Get(ExtKeyTaxCategory).In(PassThroughTaxCategories...)
+	return ok && tc != nil && tc.Ext.Get(ExtKeyTaxCategory).In(PassThroughTaxLabels...)
 }

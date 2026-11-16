@@ -85,7 +85,7 @@ func TestInvoiceValid(t *testing.T) {
 	assert.Contains(t, inv.GetAddons(), en16931.V2017)
 	assert.Equal(t, cbc.URI("iso6523-actorid-upis::9934:12345678903"), inv.Supplier.Endpoints[0].URI)
 	assert.Equal(t, cbc.URI("iso6523-actorid-upis::9934:11111111119"), inv.Customer.Endpoints[0].URI)
-	assert.Equal(t, eracun.TaxCategoryPDV25, inv.Lines[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
+	assert.Equal(t, eracun.TaxLabelPDV25, inv.Lines[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
 }
 
 func TestInvoiceRules(t *testing.T) {
@@ -174,10 +174,10 @@ func TestInvoiceRules(t *testing.T) {
 		{"HR tax category that doesn't match the rate", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Rate = ""
 			inv.Lines[0].Taxes[0].Percent = num.NewPercentage(100, 3)
-			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPDV25})
+			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPDV25})
 		}, "GOBL-HR-ERACUN-TAX-COMBO-01"},
 		{"pass-through category on a standard combo", func(inv *bill.Invoice) {
-			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPP})
+			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP})
 		}, "GOBL-HR-ERACUN-TAX-COMBO-02"},
 		{"VAT from a supplier with no VAT number", func(inv *bill.Invoice) {
 			outsideVAT(inv)
@@ -222,18 +222,18 @@ func TestTaxComboNormalization(t *testing.T) {
 		combo *tax.Combo
 		want  cbc.Code
 	}{
-		{&tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateGeneral}, eracun.TaxCategoryPDV25},
-		{&tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateReduced}, eracun.TaxCategoryPDV13},
-		{&tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateSuperReduced}, eracun.TaxCategoryPDV5},
-		{&tax.Combo{Category: tax.CategoryVAT, Percent: num.NewPercentage(250, 3)}, eracun.TaxCategoryPDV25},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyZero}, eracun.TaxCategoryZ},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyIntraCommunity}, eracun.TaxCategoryK},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExport}, eracun.TaxCategoryG},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyReverseCharge}, eracun.TaxCategoryAE},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExempt}, eracun.TaxCategoryE},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}, eracun.TaxCategoryO},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExempt, Ext: tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPP})}, eracun.TaxCategoryPP},
-		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyZero, Ext: tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPDV25})}, eracun.TaxCategoryZ},
+		{&tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateGeneral}, eracun.TaxLabelPDV25},
+		{&tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateReduced}, eracun.TaxLabelPDV13},
+		{&tax.Combo{Category: tax.CategoryVAT, Rate: tax.RateSuperReduced}, eracun.TaxLabelPDV5},
+		{&tax.Combo{Category: tax.CategoryVAT, Percent: num.NewPercentage(250, 3)}, eracun.TaxLabelPDV25},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyZero}, eracun.TaxLabelZ},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyIntraCommunity}, eracun.TaxLabelK},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExport}, eracun.TaxLabelG},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyReverseCharge}, eracun.TaxLabelAE},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExempt}, eracun.TaxLabelE},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}, eracun.TaxLabelO},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExempt, Ext: tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP})}, eracun.TaxLabelPP},
+		{&tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyZero, Ext: tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPDV25})}, eracun.TaxLabelZ},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want.String(), func(t *testing.T) {

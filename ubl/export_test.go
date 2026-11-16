@@ -91,7 +91,7 @@ func testInvoice() *bill.Invoice {
 				Taxes: tax.Set{{
 					Category: tax.CategoryVAT,
 					Key:      tax.KeyExempt,
-					Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPP}),
+					Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
 				}},
 			},
 		},
@@ -156,7 +156,7 @@ func TestExportInvoice(t *testing.T) {
 		inv := env2.Extract().(*bill.Invoice)
 		assert.True(t, inv.HasTags(hr.TagCashBasis))
 		assert.Equal(t, cbc.Code("P99:Narudzba"), inv.Tax.GetExt(eracun.ExtKeyProcess))
-		assert.Equal(t, eracun.TaxCategoryPP, inv.Charges[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
+		assert.Equal(t, eracun.TaxLabelPP, inv.Charges[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
 		op := eracun.Operator(inv.Supplier.People)
 		require.NotNil(t, op)
 		assert.Equal(t, "Blagajna 1", op.Name.Given)
@@ -241,7 +241,7 @@ func TestMergedExemptionKeepsVATEX(t *testing.T) {
 	inv.Lines[0].Taxes = tax.Set{{
 		Category: tax.CategoryVAT,
 		Key:      tax.KeyExempt,
-		Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxCategoryPP}),
+		Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
 	}}
 	inv.Lines[1].Taxes = tax.Set{{
 		Category: tax.CategoryVAT,
