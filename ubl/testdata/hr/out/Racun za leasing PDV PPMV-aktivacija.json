@@ -133,10 +133,7 @@
 						"untdid-tax-category": "E"
 					}
 				}
-			],
-			"meta": {
-				"hr-eracun-tax-exemption-reason": "Posebni porez na motorna vozila"
-			}
+			]
 		}
 	],
 	"payment": {

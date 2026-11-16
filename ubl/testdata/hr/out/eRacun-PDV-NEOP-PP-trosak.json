@@ -135,10 +135,7 @@
 						"untdid-tax-category": "E"
 					}
 				}
-			],
-			"meta": {
-				"hr-eracun-tax-exemption-reason": "Porez na potrošnju"
-			}
+			]
 		}
 	],
 	"payment": {

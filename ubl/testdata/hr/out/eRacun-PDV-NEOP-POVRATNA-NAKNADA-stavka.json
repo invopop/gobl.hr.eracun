@@ -133,6 +133,9 @@
 				"unit": "piece",
 				"ext": {
 					"untdid-unit": "H87"
+				},
+				"meta": {
+					"hr-eracun-tax-exemption-reason": "#HR:POVNAK#Povratna naknada"
 				}
 			},
 			"sum": "5.00",

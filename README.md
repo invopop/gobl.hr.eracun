@@ -78,6 +78,23 @@ The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
 invoice is paid. The regime adds the legal VAT note, and the UBL export writes
 `HRObracunPDVPoNaplati`.
 
+## Exemption reasons
+
+Every exempt (E) or not taxable (O) line and document level charge needs an
+exemption reason (HR-BR-13, HR-BR-36). The UBL export writes the text of the
+invoice's VAT note for its category, except for an amount left out of the VAT
+base (`POVNAK`, `PP`, `PPMV` or `N`). That amount gets the name of its label:
+"Povratna naknada", "Porez na potrošnju", "Posebni porez na motorna vozila" or
+"Neoporeziva naknada", as the official examples write it on a POVNAK, PP or
+PPMV charge. So the `exempt` VAT note gives the legal ground of the exempt
+supplies, and it is also the one reason of the EN 16931 VAT breakdown, where
+all E amounts share one entry (BR-E-01).
+
+To give a line or charge a reason of its own, such as "Turistička pristojba"
+for a tourist tax, set the meta `hr-eracun-tax-exemption-reason` on the line's
+item, or on the charge or discount. The import sets it when a received reason
+differs from the one the export would write.
+
 ## Supplier
 
 A supplier in the VAT system gives its Croatian VAT number in `tax_id`, and

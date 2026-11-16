@@ -39,7 +39,7 @@ func testInvoice() *bill.Invoice {
 		Tax: &bill.Tax{
 			Ext: tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyProcess: "P99:Narudzba"}),
 			Notes: []*tax.Note{
-				{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"},
+				{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Oslobođeno PDV-a"},
 			},
 		},
 		Supplier: &org.Party{
@@ -441,15 +441,16 @@ func TestChargeExemptionReason(t *testing.T) {
 		require.NoError(t, err)
 		return env.Extract().(*bill.Invoice)
 	}
-	t.Run("differs from the note", func(t *testing.T) {
+	t.Run("same as the label's", func(t *testing.T) {
 		inv := importExample(t, func(s string) string { return s })
-		assert.Equal(t, "Porez na potrošnju", inv.Charges[0].Meta[hrubl.MetaKeyTaxExemptionReason])
+		assert.Empty(t, inv.Charges[0].Meta)
 	})
-	t.Run("same as the note", func(t *testing.T) {
+	t.Run("differs from the label's", func(t *testing.T) {
 		inv := importExample(t, func(s string) string {
 			return strings.Replace(s, "<cbc:TaxExemptionReason>Porez na potrošnju<", "<cbc:TaxExemptionReason>#HR:PP#Porez na potrošnju<", 1)
 		})
-		assert.Empty(t, inv.Charges[0].Meta)
+		assert.Equal(t, "#HR:PP#Porez na potrošnju", inv.Charges[0].Meta[hrubl.MetaKeyTaxExemptionReason],
+			"a pass-through charge doesn't take the VAT note, even with the same text")
 	})
 	t.Run("discount", func(t *testing.T) {
 		inv := testInvoice()
@@ -497,6 +498,38 @@ func TestLineExemptionReason(t *testing.T) {
 	ctc := out.(*goblubl.Invoice).InvoiceLines[1].Item.ClassifiedTaxCategory
 	assert.Equal(t, "Povratna naknada za ambalažu", *ctc.TaxExemptionReason)
 	assert.Equal(t, "#HR:POVNAK#Povratna naknada", *out.(*goblubl.Invoice).TaxTotal[0].TaxSubtotal[1].TaxCategory.TaxExemptionReason)
+}
+
+// TestPassThroughExemptionReason checks that an amount left out of the VAT
+// base is given the reason of its HR-TB-2 label, so that it doesn't share the
+// VAT note with an exempt supply on the same invoice, and the exempt supply
+// keeps the note's text.
+func TestPassThroughExemptionReason(t *testing.T) {
+	inv := testInvoice()
+	inv.Lines = append(inv.Lines, &bill.Line{
+		Quantity: num.MakeAmount(4, 0),
+		Item: &org.Item{
+			Name:       "Povratna naknada",
+			Price:      num.NewAmount(7, 2),
+			Identities: []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "62.20.20"}},
+		},
+		Taxes: tax.Set{{
+			Category: tax.CategoryVAT,
+			Key:      tax.KeyExempt,
+			Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPOVNAK}),
+		}},
+	})
+	doc := exportTestInvoice(t, inv)
+	require.Len(t, doc.InvoiceLines, 3)
+	reason := func(s *string) string {
+		t.Helper()
+		require.NotNil(t, s)
+		return *s
+	}
+	assert.Equal(t, "Oslobođeno PDV-a", reason(doc.InvoiceLines[1].Item.ClassifiedTaxCategory.TaxExemptionReason), "exempt service")
+	assert.Equal(t, "Povratna naknada", reason(doc.InvoiceLines[2].Item.ClassifiedTaxCategory.TaxExemptionReason), "return fee")
+	require.NotEmpty(t, doc.AllowanceCharge)
+	assert.Equal(t, "Porez na potrošnju", reason(doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason), "consumption tax")
 }
 
 // TestKeptExemptionReasonNeedsExemptCategory checks that a kept exemption

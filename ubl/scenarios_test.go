@@ -147,13 +147,9 @@ var scenarios = []scenario{
 			Amount: num.MakeAmount(300, 2),
 			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
 		}}
-		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
+		addNote(inv, tax.KeyExempt, "Oslobođeno PDV-a")
 	},
-		check: lineReasonIsNot(1, "Porez na potrošnju"),
-		pending: &knownFailure{
-			why:   "the exempt line takes the PP charge's exemption reason: one E note serves both (review comment on ubl/export.go)",
-			shows: "carries the exemption reason",
-		},
+		check: checks(lineReason(1, "Oslobođeno PDV-a"), chargeReason(0, "Porez na potrošnju")),
 	},
 
 	// An issuer outside the VAT system: a tax ID with only the country and its
@@ -520,13 +516,36 @@ func lineLabel(i int, want string) func(*goblubl.Invoice) []string {
 	}
 }
 
-// lineReasonIsNot checks that a line doesn't carry another amount's
-// exemption reason.
-func lineReasonIsNot(i int, other string) func(*goblubl.Invoice) []string {
+// checks runs every check on the document.
+func checks(cs ...func(*goblubl.Invoice) []string) func(*goblubl.Invoice) []string {
+	return func(doc *goblubl.Invoice) []string {
+		var out []string
+		for _, c := range cs {
+			out = append(out, c(doc)...)
+		}
+		return out
+	}
+}
+
+// lineReason checks the exemption reason of line i.
+func lineReason(i int, want string) func(*goblubl.Invoice) []string {
 	return func(doc *goblubl.Invoice) []string {
 		ctc := lineTaxCategory(doc, i)
-		if ctc != nil && ctc.TaxExemptionReason != nil && *ctc.TaxExemptionReason == other {
-			return []string{fmt.Sprintf("line %d carries the exemption reason %q of another amount", i+1, other)}
+		if ctc == nil || ctc.TaxExemptionReason == nil || *ctc.TaxExemptionReason != want {
+			return []string{fmt.Sprintf("line %d doesn't carry the exemption reason %q", i+1, want)}
+		}
+		return nil
+	}
+}
+
+// chargeReason checks the exemption reason of document level charge or
+// allowance i.
+func chargeReason(i int, want string) func(*goblubl.Invoice) []string {
+	return func(doc *goblubl.Invoice) []string {
+		if i >= len(doc.AllowanceCharge) || len(doc.AllowanceCharge[i].TaxCategory) == 0 ||
+			doc.AllowanceCharge[i].TaxCategory[0].TaxExemptionReason == nil ||
+			*doc.AllowanceCharge[i].TaxCategory[0].TaxExemptionReason != want {
+			return []string{fmt.Sprintf("charge %d doesn't carry the exemption reason %q", i+1, want)}
 		}
 		return nil
 	}

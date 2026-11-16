@@ -26,7 +26,7 @@
                 <cbc:ID>E</cbc:ID>
                 <cbc:Name>HR:E</cbc:Name>
                 <cbc:Percent>0</cbc:Percent>
-                <cbc:TaxExemptionReason>Porez na potrošnju</cbc:TaxExemptionReason>
+                <cbc:TaxExemptionReason>Oslobođeno PDV-a</cbc:TaxExemptionReason>
                 <hrextac:HRTaxScheme>
                   <cbc:ID>VAT</cbc:ID>
                 </hrextac:HRTaxScheme>
@@ -164,7 +164,7 @@
       <cac:TaxCategory>
         <cbc:ID>E</cbc:ID>
         <cbc:Percent>0</cbc:Percent>
-        <cbc:TaxExemptionReason>Porez na potrošnju</cbc:TaxExemptionReason>
+        <cbc:TaxExemptionReason>Oslobođeno PDV-a</cbc:TaxExemptionReason>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>
@@ -214,7 +214,7 @@
         <cbc:ID>E</cbc:ID>
         <cbc:Name>HR:E</cbc:Name>
         <cbc:Percent>0</cbc:Percent>
-        <cbc:TaxExemptionReason>Porez na potrošnju</cbc:TaxExemptionReason>
+        <cbc:TaxExemptionReason>Oslobođeno PDV-a</cbc:TaxExemptionReason>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>
         </cac:TaxScheme>

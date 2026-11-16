@@ -266,8 +266,8 @@ func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) error {
 			if v := tc.Ext.Get(cef.ExtKeyVATEX).String(); v != "" {
 				ctc.TaxExemptionReasonCode = &v
 			}
-			if n := taxNote(inv, tc.Ext); n != nil {
-				ctc.TaxExemptionReason = &n.Text
+			if r, ok := exemptionReason(inv, tc.Ext); ok {
+				ctc.TaxExemptionReason = &r
 			}
 		}
 		if reason, ok := keptExemptionReason(l.Item.Meta, tc.Ext); ok {
@@ -288,8 +288,9 @@ func keptExemptionReason(meta cbc.Meta, ext tax.Extensions) (string, bool) {
 }
 
 // exportChargeTaxCategories names the tax category of each document level
-// charge and allowance (HR-BR-11), and writes back an exemption reason kept
-// on import (HR-BT-7).
+// charge and allowance (HR-BR-11), writes exemptionReason in place of the VAT
+// note gobl.ubl writes, which differs only for an amount left out of the VAT
+// base, and writes back an exemption reason of its own (HR-BT-7).
 func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 	documentCharges(out, inv, func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta) {
 		tc := ts.Get(tax.CategoryVAT)
@@ -301,6 +302,9 @@ func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 				continue
 			}
 			cat.Name = taxCategoryName(tc.Ext)
+			if r, ok := exemptionReason(inv, tc.Ext); ok {
+				cat.TaxExemptionReason = &r
+			}
 			if reason, ok := keptExemptionReason(*meta, tc.Ext); ok {
 				cat.TaxExemptionReason = &reason
 			}
