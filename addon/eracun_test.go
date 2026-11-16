@@ -163,6 +163,19 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
 			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
+		{"supplier VAT number with an O line", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
+		{"customer VAT number with an O line", func(inv *bill.Invoice) {
+			outsideVAT(inv)
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-16"},
+		{"supplier VAT number with an O charge", func(inv *bill.Invoice) {
+			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
+		{"supplier VAT number with an O discount", func(inv *bill.Invoice) {
+			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
 		{"line without KPD", func(inv *bill.Invoice) { inv.Lines[0].Item.Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-12"},
 		{"rate without HR tax category", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Rate = ""
@@ -608,6 +621,24 @@ func TestSupplierOutsideVAT(t *testing.T) {
 	assert.Equal(t, org.IdentityScopeLegal, inv.Supplier.Identities[0].Scope, "the OIB is the legal registration (BT-30)")
 	require.Len(t, inv.Supplier.Endpoints, 1)
 	assert.Equal(t, cbc.URI("iso6523-actorid-upis::9934:12345678903"), inv.Supplier.Endpoints[0].URI)
+}
+
+// TestOutsideScopeWithoutVATNumbers checks that an invoice with an O amount
+// is valid when neither party has a VAT number (BR-O-02), the shape of the
+// official example "Neoporezivi racun".
+func TestOutsideScopeWithoutVATNumbers(t *testing.T) {
+	inv := testInvoice()
+	outsideVAT(inv)
+	inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+	inv.Tax.Notes = []*tax.Note{{
+		Category: tax.CategoryVAT,
+		Key:      tax.KeyOutsideScope,
+		Text:     "Neoporezivo",
+	}}
+	inv.Customer.TaxID = nil
+	inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
 }
 
 // TestSupplierInVATGetsNoOIBIdentity checks that the OIB of a VAT-registered

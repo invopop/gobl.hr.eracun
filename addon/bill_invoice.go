@@ -191,6 +191,24 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
+		// GOBL writes a tax ID code as the party's VAT identifier, which an
+		// invoice with an O (not subject to VAT) amount must not have.
+		rules.When(is.Func("has O taxes", invoiceHasOutsideScope),
+			rules.Field("supplier",
+				rules.Field("tax_id",
+					rules.Field("code",
+						rules.Assert("15", "invoice supplier tax ID code must be empty for O taxes (BR-O-02 to BR-O-04)", is.Empty),
+					),
+				),
+			),
+			rules.Field("customer",
+				rules.Field("tax_id",
+					rules.Field("code",
+						rules.Assert("16", "invoice customer tax ID code must be empty for O taxes (BR-O-02 to BR-O-04)", is.Empty),
+					),
+				),
+			),
+		),
 		// A supplier with a tax ID with only the country HR has no VAT number:
 		// it is outside the VAT system. The HR schematron accepts its tax
 		// registration (BT-32) wherever a seller tax ID is required, so these
@@ -308,21 +326,29 @@ func OperatorName(n *org.Name) string {
 
 func invoiceNeedsBuyerVAT(val any) bool {
 	inv, ok := val.(*bill.Invoice)
-	if !ok || inv == nil {
-		return false
-	}
+	return ok && inv != nil && invoiceHasTaxCategory(inv, buyerVATTaxCategories)
+}
+
+func invoiceHasOutsideScope(val any) bool {
+	inv, ok := val.(*bill.Invoice)
+	return ok && inv != nil && invoiceHasTaxCategory(inv, []cbc.Code{en16931.TaxCategoryOutsideScope})
+}
+
+// invoiceHasTaxCategory checks for a VAT combo with one of the EN 16931 tax
+// categories on a line, a document level charge or a document level discount.
+func invoiceHasTaxCategory(inv *bill.Invoice, codes []cbc.Code) bool {
 	for _, l := range inv.Lines {
-		if l != nil && taxesHaveCategory(l.Taxes, buyerVATTaxCategories) {
+		if l != nil && taxesHaveCategory(l.Taxes, codes) {
 			return true
 		}
 	}
 	for _, c := range inv.Charges {
-		if c != nil && taxesHaveCategory(c.Taxes, buyerVATTaxCategories) {
+		if c != nil && taxesHaveCategory(c.Taxes, codes) {
 			return true
 		}
 	}
 	for _, d := range inv.Discounts {
-		if d != nil && taxesHaveCategory(d.Taxes, buyerVATTaxCategories) {
+		if d != nil && taxesHaveCategory(d.Taxes, codes) {
 			return true
 		}
 	}

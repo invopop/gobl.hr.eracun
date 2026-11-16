@@ -186,14 +186,14 @@ var scenarios = []scenario{
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
 		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
 	},
-		fault: "BR-O-02", rule: "BR-O-02", pending: brO02,
+		fault: "GOBL-HR-ERACUN-BILL-INVOICE-15", rule: "BR-O-02",
 	},
 	{name: "outside scope to a buyer with a VAT number", edit: func(inv *bill.Invoice) {
 		inv.Supplier = supplierOutsideVAT()
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
 		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
 	},
-		fault: "BR-O-02", rule: "BR-O-02", pending: brO02,
+		fault: "GOBL-HR-ERACUN-BILL-INVOICE-16", rule: "BR-O-02",
 	},
 
 	// Document types (BT-3) and business processes (BT-23).
@@ -256,11 +256,6 @@ var scenarios = []scenario{
 	{name: "amount due with no payment terms", edit: func(inv *bill.Invoice) {
 		inv.Payment = nil
 	}, fault: "GOBL-EU-EN16931-BILL-INVOICE-06", rule: "BR-CO-25"},
-}
-
-var brO02 = &knownFailure{
-	why:   "BR-O-02 is left to the schematron (review comment on addon/tax_combo.go)",
-	shows: "GOBL accepts it",
 }
 
 func intraCommunity(inv *bill.Invoice) {
