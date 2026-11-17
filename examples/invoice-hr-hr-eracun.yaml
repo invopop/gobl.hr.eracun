@@ -1,0 +1,65 @@
+$schema: "https://gobl.org/draft-0/bill/invoice"
+$regime: "HR"
+$addons: ["hr-eracun-v1"]
+uuid: "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a2"
+type: standard
+code: "1-P1-1"
+issue_date: "2026-12-01"
+issue_time: "12:00:00"
+currency: "EUR"
+tax:
+  ext:
+    hr-eracun-process: "P1"
+
+supplier:
+  name: "TVRTKA A d.o.o."
+  tax_id:
+    country: "HR"
+    code: "12345678903"
+  people:
+    - key: operator
+      name:
+        given: "Ivan"
+        surname: "Horvat"
+      identities:
+        - type: OIB
+          code: "22222222226"
+  addresses:
+    - street: "Ulica 1"
+      locality: "Zagreb"
+      code: "10000"
+      country: "HR"
+
+customer:
+  name: "Tvrtka B d.o.o."
+  tax_id:
+    country: "HR"
+    code: "11111111119"
+  addresses:
+    - street: "Ulica 2"
+      locality: "Rijeka"
+      code: "51000"
+      country: "HR"
+
+lines:
+  - quantity: 1
+    item:
+      name: "Proizvod"
+      price: "100.00"
+      unit: piece
+      identities:
+        - label: CG
+          code: "62.20.20"
+    taxes:
+      - cat: VAT
+        rate: general
+
+payment:
+  terms:
+    due_dates:
+      - date: "2026-12-31"
+        percent: "100%"
+  instructions:
+    key: credit-transfer
+    credit_transfer:
+      - iban: "HR1210010051863000160"
