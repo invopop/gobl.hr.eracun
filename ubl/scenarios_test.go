@@ -109,22 +109,18 @@ var scenarios = []scenario{
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyReverseCharge, "")}
 		addNote(inv, tax.KeyReverseCharge, "Prijenos porezne obveze čl. 75. st. 3. Zakona o PDV-u")
 	}},
-	{name: "intra-community supply", edit: intraCommunity},
-	{name: "export outside the EU", edit: func(inv *bill.Invoice) {
+	{name: "export outside the EU", edit: export},
+
+	// An eRačun goes only to a taxpayer established in Croatia (Art. 2(24)
+	// of the Fiscalisation Act), so the HR schematron's foreign buyers,
+	// which it accepts, are refused by GOBL alone. An intra-community supply
+	// always has one, so BR-IC-11 and BR-IC-12, which the en16931 addon
+	// leaves to the schematron, can't be reached here.
+	{name: "intra-community supply", edit: intraCommunity, fault: "GOBL-HR-ERACUN-BILL-INVOICE-22"},
+	{name: "export to a buyer outside Croatia", edit: func(inv *bill.Invoice) {
+		export(inv)
 		inv.Customer = customerNonEU()
-		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExport, "")}
-		addNote(inv, tax.KeyExport, "Oslobođeno PDV čl. 45. Zakona o PDV-u")
-	}},
-	{name: "intra-community supply with no delivery date or country", edit: func(inv *bill.Invoice) {
-		intraCommunity(inv)
-		inv.Delivery = nil
-	},
-		fault: "BR-IC-11", rule: "BR-IC-11",
-		pending: &knownFailure{
-			why:   "BR-IC-11 and BR-IC-12 are left to the schematron: the en16931 addon has no rule for them",
-			shows: "GOBL accepts it",
-		},
-	},
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-23"},
 
 	// Amounts collected for a third party, outside the VAT base (HR-TB-2
 	// labels POVNAK, PP, PPMV and N).
@@ -252,6 +248,11 @@ var scenarios = []scenario{
 	{name: "amount due with no payment terms", edit: func(inv *bill.Invoice) {
 		inv.Payment = nil
 	}, fault: "GOBL-EU-EN16931-BILL-INVOICE-06", rule: "BR-CO-25"},
+}
+
+func export(inv *bill.Invoice) {
+	inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExport, "")}
+	addNote(inv, tax.KeyExport, "Oslobođeno PDV čl. 45. Zakona o PDV-u")
 }
 
 func intraCommunity(inv *bill.Invoice) {

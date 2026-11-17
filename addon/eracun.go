@@ -78,7 +78,15 @@ func newAddon() *tax.AddonDef {
 				ID with only the country HR and its OIB as an identity of type OIB,
 				and must not charge VAT. Parties with an OIB, from an OIB identity or
 				a Croatian VAT number, and no ISO 6523 endpoint are given the eRačun
-				network address 9934:<OIB>.
+				network address 9934:<OIB>. An address given with the scheme 9934
+				must be a valid OIB, the party's own when it has one. Other ISO 6523
+				schemes, such as a GLN, are accepted, as AMS registers them too.
+
+				An eRačun goes only to a taxpayer established in Croatia, so a
+				customer with a foreign tax ID is refused, and the customer needs its
+				OIB, which CIS records: a Croatian VAT number, an OIB identity or a
+				9934:<OIB> address. An intra-community supply or an invoice to a
+				foreign buyer is issued another way.
 
 				An invoice with no issue time, dated today or not dated at all, is
 				given the current date and time in Croatia. An invoice dated another

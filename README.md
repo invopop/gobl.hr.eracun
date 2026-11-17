@@ -121,6 +121,25 @@ has it. The invoice must not charge VAT, and its S, Z, E and AE taxes need the
 supplier. The `hr-fiskal-b2c-v1` addon takes the same party, and gobl.fr.ctc
 models a French supplier the same way, with a SIREN identity.
 
+## eRačun addresses and buyers
+
+Both parties need an eRačun address, written as the UBL `EndpointID` (BT-34,
+BT-49). Every participant is registered in AMS under its OIB, as
+`iso6523-actorid-upis::9934:<OIB>`, and may also be registered under other
+ISO 6523 identifiers, such as a GLN (`0088`). The addon gives a party with an
+OIB, from its Croatian VAT number or an `OIB` identity, and no address the
+address `9934:<OIB>`. An address given with the scheme `9934` must be a valid
+OIB, the party's own when it has one. Other schemes are accepted as given.
+
+An eRačun goes only to a taxpayer established in Croatia (Fiscalisation Act,
+Art. 2(24) and 38), so a customer with a foreign tax ID is refused, even though
+the HR schematron accepts foreign parties. The customer also needs its OIB,
+which CIS records for every eRačun: a Croatian VAT number, an `OIB` identity or
+a `9934:<OIB>` address. An intra-community supply, or any invoice to a foreign
+buyer, is issued on paper or in another form the tax rules accept (Tax
+Administration FAQ, eRačun fiscalization, question 8). An export (`G`) to a
+Croatian buyer is still an eRačun.
+
 ## Operator
 
 An eRačun names its operator, the person who issued it: a label in

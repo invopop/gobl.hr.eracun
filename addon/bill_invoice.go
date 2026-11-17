@@ -154,6 +154,12 @@ func billInvoiceRules() *rules.Set {
 			rules.Assert("05", "invoice supplier requires an eRačun address registered in AMS: an OIB, from a Croatian VAT number or an OIB identity, or an ISO 6523 endpoint, not an email (HR-BR-7)",
 				is.Func("has endpoint", partyHasEndpoint),
 			),
+			rules.Assert("18", "invoice supplier eRačun address with scheme 9934 must be a valid OIB (HR-BR-7)",
+				is.Func("9934 address is an OIB", partyOIBAddressValid),
+			),
+			rules.Assert("19", "invoice supplier eRačun address must be the supplier's own OIB, the one in its Croatian VAT number or OIB identity (HR-BR-7)",
+				is.Func("address matches OIB", partyAddressMatchesOIB),
+			),
 			rules.Assert("17", "invoice supplier OIB identity must be the OIB in its Croatian VAT number (supplier tax ID code)",
 				is.Func("VAT number matches OIB identity", vatNumberMatchesOIBIdentity),
 			),
@@ -179,6 +185,20 @@ func billInvoiceRules() *rules.Set {
 			rules.Assert("08", "invoice customer is required", is.Present),
 			rules.Assert("09", "invoice customer requires an eRačun address registered in AMS: a Croatian tax ID or an ISO 6523 endpoint, not an email (HR-BR-10)",
 				is.Func("has endpoint", partyHasEndpoint),
+			),
+			rules.Assert("20", "invoice customer eRačun address with scheme 9934 must be a valid OIB (HR-BR-10)",
+				is.Func("9934 address is an OIB", partyOIBAddressValid),
+			),
+			rules.Assert("21", "invoice customer eRačun address must be the customer's own OIB, the one in its Croatian VAT number or OIB identity (HR-BR-10)",
+				is.Func("address matches OIB", partyAddressMatchesOIB),
+			),
+			rules.Assert("23", "invoice customer requires its OIB, which CIS records for the buyer: a Croatian VAT number, an OIB identity or a 9934:<OIB> address",
+				is.Func("has OIB", partyHasOIB),
+			),
+			rules.Field("tax_id",
+				rules.Assert("22", "invoice customer tax ID must be Croatian: an eRačun recipient is a taxpayer established in Croatia (Art. 2(24) of the Fiscalisation Act), so invoice a foreign buyer another way",
+					is.Func("Croatian", taxIDIsCroatian),
+				),
 			),
 		),
 		rules.When(is.Func("has S, Z, E or AE taxes", invoiceNeedsBuyerVAT),
@@ -242,30 +262,97 @@ func billInvoiceRules() *rules.Set {
 	)
 }
 
-// partyHasEndpoint checks the party has an eRačun address, the ISO 6523
-// identifier registered in AMS, as the UBL EndpointID it is written to. The
-// export writes the first of an ISO 6523 endpoint, an email endpoint, or an
-// inbox with an email or a scheme, and an email is not an eRačun address.
-func partyHasEndpoint(val any) bool {
-	p, ok := val.(*org.Party)
-	if !ok || p == nil || p.Endpoint(iso.ActorIDScheme) != nil {
-		return true
+// partyAddress provides the party's eRačun address as gobl.ubl's export
+// writes it to the UBL EndpointID (BT-34, BT-49): the first of an ISO 6523
+// endpoint with a scheme and a code, an email endpoint with an address, or an
+// inbox with an email or a scheme. found is false when that is an email,
+// which is not an eRačun address, or nothing.
+func partyAddress(p *org.Party) (scheme, code cbc.Code, found bool) {
+	if e := p.Endpoint(iso.ActorIDScheme); e != nil {
+		s, c, ok := strings.Cut(strings.TrimPrefix(e.URI.Opaque(), ":"), ":")
+		if ok && s != "" && c != "" {
+			return cbc.Code(s), cbc.Code(c), true
+		}
 	}
-	if p.Endpoint("mailto") != nil {
-		return false
+	if e := p.Endpoint("mailto"); e != nil && e.URI.Opaque() != "" {
+		return cbc.CodeEmpty, cbc.CodeEmpty, false
 	}
 	for _, ib := range p.Inboxes {
 		if ib == nil {
 			continue
 		}
 		if ib.Email != "" {
-			return false
+			return cbc.CodeEmpty, cbc.CodeEmpty, false
 		}
 		if ib.Scheme != cbc.CodeEmpty {
-			return true
+			return ib.Scheme, ib.Code, true
 		}
 	}
-	return false
+	return cbc.CodeEmpty, cbc.CodeEmpty, false
+}
+
+// partyHasEndpoint checks the party has an eRačun address.
+func partyHasEndpoint(val any) bool {
+	p, ok := val.(*org.Party)
+	if !ok || p == nil {
+		return true
+	}
+	_, _, found := partyAddress(p)
+	return found
+}
+
+// partyOIBAddressValid checks that an eRačun address with scheme 9934 holds a
+// valid OIB, as AMS registers it: iso6523-actorid-upis::9934:<OIB>. AMS also
+// registers other ISO 6523 identifiers, such as a GLN (0088), besides the
+// OIB every participant has (AMS specification v1.4, MPS specification
+// v1.3), so an address in another scheme is left alone. A party with no
+// address is left to rules 05 and 09.
+func partyOIBAddressValid(val any) bool {
+	p, ok := val.(*org.Party)
+	if !ok || p == nil {
+		return true
+	}
+	scheme, code, found := partyAddress(p)
+	return !found || scheme != SchemeIDOIB || validOIB(code.String())
+}
+
+// partyHasOIB checks the party has an OIB: from its Croatian VAT number, its
+// OIB identity, or a valid 9934 address. CIS records the buyer's OIB with
+// every eRačun (Primatelj.oibPorezniBroj), and every eRačun recipient has
+// one, whatever other identifiers it uses (MPS specification v1.3).
+func partyHasOIB(val any) bool {
+	p, ok := val.(*org.Party)
+	if !ok || p == nil || PartyOIB(p) != cbc.CodeEmpty {
+		return true
+	}
+	scheme, code, found := partyAddress(p)
+	return found && scheme == SchemeIDOIB && validOIB(code.String())
+}
+
+// partyAddressMatchesOIB checks that a party with an OIB, from its Croatian
+// VAT number or its OIB identity, has it as its 9934 address too: the
+// eRačun would otherwise go to another participant than the one it names.
+// An address that is not a valid OIB is left to partyOIBAddressValid.
+func partyAddressMatchesOIB(val any) bool {
+	p, ok := val.(*org.Party)
+	if !ok || p == nil {
+		return true
+	}
+	scheme, code, found := partyAddress(p)
+	if !found || scheme != SchemeIDOIB || !validOIB(code.String()) {
+		return true
+	}
+	oib := PartyOIB(p)
+	return oib == cbc.CodeEmpty || code == oib
+}
+
+// taxIDIsCroatian checks a tax ID belongs to Croatia. An eRačun is exchanged
+// only between taxpayers established in Croatia (Art. 2(24) and 38 of the
+// Fiscalisation Act), so a buyer with a foreign tax ID gets its invoice
+// another way: on paper or as another electronic invoice.
+func taxIDIsCroatian(val any) bool {
+	tID, ok := val.(*tax.Identity)
+	return !ok || tID == nil || tID.Country == l10n.HR.Tax()
 }
 
 func peopleHaveOneOperator(val any) bool {

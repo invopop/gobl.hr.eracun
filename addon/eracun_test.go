@@ -143,6 +143,45 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "https://example.com/inbox"}}
 			inv.Customer.Inboxes = []*org.Inbox{{Code: "123"}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-09"},
+		{"supplier address with an invalid OIB", func(inv *bill.Invoice) {
+			inv.Supplier.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "12345678900"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-18"},
+		{"supplier address with another party's OIB", func(inv *bill.Invoice) {
+			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-19"},
+		{"customer with no OIB, only an address in another scheme", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "0088", Code: "3850001234567"}}
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-23"},
+		{"customer with no OIB, only an invalid 9934 address", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "11111111118"}}
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-23"},
+		{"customer address with an invalid OIB", func(inv *bill.Invoice) {
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "11111111118"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-20"},
+		{"customer address that is not 11 digits", func(inv *bill.Invoice) {
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-20"},
+		{"customer address with another party's OIB", func(inv *bill.Invoice) {
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-21"},
+		{"customer address that differs from its OIB identity", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "11111111119"}}
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "12345678903"}}
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-21"},
+		{"customer with a foreign tax ID", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9930", Code: "DE111111125"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-22"},
+		{"customer with a foreign tax ID and an OIB address", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
+			inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "11111111119"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-22"},
 		{"customer without tax ID", func(inv *bill.Invoice) {
 			inv.Customer.TaxID = nil
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
@@ -258,13 +297,42 @@ func TestTaxComboNormalization(t *testing.T) {
 	}
 }
 
+// TestEndpointFromInboxScheme checks that an inbox in another ISO 6523
+// scheme than 9934, such as a GLN, which AMS also registers, is the
+// address, and that a customer with an OIB in its VAT number may use it.
 func TestEndpointFromInboxScheme(t *testing.T) {
 	inv := testInvoice()
-	inv.Customer.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
 	inv.Customer.Inboxes = []*org.Inbox{{Scheme: "0088", Code: "3850001234567"}}
 	require.NoError(t, inv.Calculate())
 	require.Empty(t, inv.Customer.Endpoints)
 	require.NoError(t, rules.Validate(inv))
+}
+
+// TestInvalidAddressOneFault checks that an address that is not a valid OIB
+// is reported once, as such, and not also as another party's OIB.
+func TestInvalidAddressOneFault(t *testing.T) {
+	inv := testInvoice()
+	inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "11111111118"}}
+	require.NoError(t, inv.Calculate())
+	faults := rules.Validate(inv)
+	require.Error(t, faults)
+	assert.True(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-20"), "got %s", faults)
+	assert.False(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-21"), "got %s", faults)
+}
+
+// TestAddressSkipsIncompleteEndpoint checks that the rules read the address
+// the export writes: an ISO 6523 endpoint without a code is skipped, as the
+// export skips it, and the inbox after it is the address. The EN 16931
+// addon reports the incomplete endpoint itself.
+func TestAddressSkipsIncompleteEndpoint(t *testing.T) {
+	inv := testInvoice()
+	inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934"}}
+	inv.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "11111111119"}}
+	require.NoError(t, inv.Calculate())
+	faults := rules.Validate(inv)
+	require.Error(t, faults)
+	assert.True(t, faults.HasCode("GOBL-EU-EN16931-ORG-ENDPOINT-01"), "got %s", faults)
+	assert.False(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-20"), "got %s", faults)
 }
 
 func TestEndpointNotDerivedWhenPresent(t *testing.T) {
@@ -273,6 +341,7 @@ func TestEndpointNotDerivedWhenPresent(t *testing.T) {
 	require.NoError(t, inv.Calculate())
 	require.Len(t, inv.Supplier.Endpoints, 1)
 	assert.Equal(t, cbc.URI("iso6523-actorid-upis::0088:1234567890123"), inv.Supplier.Endpoints[0].URI)
+	require.NoError(t, rules.Validate(inv))
 }
 
 func TestOperator(t *testing.T) {
@@ -417,6 +486,18 @@ func TestStatusRules(t *testing.T) {
 			st.Customer.TaxID = &tax.Identity{Country: "HR"}
 			st.Customer.Endpoints = []*org.Endpoint{{URI: "mailto:racuni@example.com"}}
 		}, "GOBL-HR-ERACUN-BILL-STATUS-03"},
+		{"supplier address with an invalid OIB", func(st *bill.Status) {
+			st.Supplier.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "12345"}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-15"},
+		{"supplier address with another party's OIB", func(st *bill.Status) {
+			st.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-16"},
+		{"customer address with an invalid OIB", func(st *bill.Status) {
+			st.Customer.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "11111111118"}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-17"},
+		{"customer address with another party's OIB", func(st *bill.Status) {
+			st.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
+		}, "GOBL-HR-ERACUN-BILL-STATUS-18"},
 		{"error", func(st *bill.Status) { st.Lines[0].Key = bill.StatusLineError }, "GOBL-HR-ERACUN-BILL-STATUS-04"},
 		{"issued", func(st *bill.Status) { st.Lines[0].Key = bill.StatusLineIssued }, "GOBL-HR-ERACUN-BILL-STATUS-04"},
 		{"no description", func(st *bill.Status) { st.Lines[0].Description = "" }, "GOBL-HR-ERACUN-BILL-STATUS-05"},

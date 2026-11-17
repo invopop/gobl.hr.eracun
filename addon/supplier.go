@@ -56,6 +56,34 @@ func NormalizeOIB(code string) cbc.Code {
 	return cbc.Code(strings.TrimPrefix(c.String(), l10n.HR.String()))
 }
 
+// validOIB checks an OIB: 11 digits, the last of them the ISO 7064 MOD 11,10
+// check digit. It is the check the hr regime makes on a tax ID or an OIB
+// identity, which the regime doesn't export, and the u:ctrlOIB function of
+// the HR schematron.
+func validOIB(code string) bool {
+	if len(code) != 11 {
+		return false
+	}
+	for i := range len(code) {
+		if code[i] < '0' || code[i] > '9' {
+			return false
+		}
+	}
+	r := 10
+	for i := range 10 {
+		a := (r + int(code[i]-'0')) % 10
+		if a == 0 {
+			a = 10
+		}
+		r = (a * 2) % 11
+	}
+	check := 11 - r
+	if check == 10 {
+		check = 0
+	}
+	return check == int(code[10]-'0')
+}
+
 // partyOutsideVAT says whether the party is a Croatian supplier outside the
 // VAT system: a tax ID with only the country HR. A party with no tax ID
 // says nothing about it.
