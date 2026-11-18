@@ -2,6 +2,7 @@ package ubl
 
 import (
 	"github.com/invopop/gobl"
+	eracun "github.com/invopop/gobl.hr.eracun/addon"
 	goblubl "github.com/invopop/gobl.ubl"
 	"github.com/invopop/gobl/addons/eu/en16931"
 	"github.com/invopop/gobl/bill"
@@ -12,8 +13,20 @@ import (
 
 // reasonRequiredCategories are the EN 16931 VAT categories whose lines and
 // document level charges must carry an exemption reason in the HR CIUS
-// (HR-BR-13, HR-BR-36): the export writes the VAT note's text for them.
+// (HR-BR-13, HR-BR-36): the export writes exemptionReason for them.
 var reasonRequiredCategories = []cbc.Code{en16931.TaxCategoryExempt, en16931.TaxCategoryOutsideScope}
+
+// passThroughReasons are the exemption reasons of the amounts left out of the
+// VAT base (Art. 33(3) of the VAT Act), by HR-TB-2 label: the label's name,
+// as the official examples write it on a POVNAK, PP or PPMV charge. The
+// official POVNAK line example writes "#HR:POVNAK#Povratna naknada"; import
+// keeps that form in MetaKeyTaxExemptionReason.
+var passThroughReasons = map[cbc.Code]string{
+	eracun.TaxLabelPOVNAK: "Povratna naknada",
+	eracun.TaxLabelPP:     "Porez na potrošnju",
+	eracun.TaxLabelPPMV:   "Posebni porez na motorna vozila",
+	eracun.TaxLabelN:      "Neoporeziva naknada",
+}
 
 // reasonAllowedCategories are the EN 16931 VAT categories that may carry an
 // exemption reason: a reason kept on import is written back for them.
@@ -72,11 +85,27 @@ func documentCharges(doc *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblub
 	}
 }
 
+// exemptionReason provides the exemption reason the export writes for a line
+// or a document level charge or allowance with these VAT extensions, unless
+// MetaKeyTaxExemptionReason gives one of its own. An amount left out of the
+// VAT base gets the reason of its HR-TB-2 label: it is E in EN 16931 but not
+// an exempt supply, so it doesn't take the E note, which an exempt supply on
+// the same invoice needs for its legal ground. Anything else gets the text of
+// the VAT note for its category.
+func exemptionReason(inv *bill.Invoice, ext tax.Extensions) (string, bool) {
+	if r, ok := passThroughReasons[ext.Get(eracun.ExtKeyTaxCategory)]; ok {
+		return r, true
+	}
+	if n := taxNote(inv, ext); n != nil {
+		return n.Text, true
+	}
+	return "", false
+}
+
 // taxNote provides the VAT note with the exemption reason of the EN 16931
 // tax category, the way gobl.ubl finds it for the tax breakdown. GOBL has one
-// note per category, so every E line and charge shares one reason text, an
-// exempt supply and an amount left out of the VAT base included: a reason of
-// its own is kept under MetaKeyTaxExemptionReason.
+// note per category, so every exempt line and charge shares one reason text:
+// a reason of its own is kept under MetaKeyTaxExemptionReason.
 func taxNote(inv *bill.Invoice, ext tax.Extensions) *tax.Note {
 	cat := ext.Get(untdid.ExtKeyTaxCategory)
 	if inv.Tax == nil || cat == cbc.CodeEmpty {

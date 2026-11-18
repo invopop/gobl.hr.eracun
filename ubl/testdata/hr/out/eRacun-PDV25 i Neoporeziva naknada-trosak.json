@@ -47,11 +47,6 @@
 				]
 			}
 		],
-		"endpoints": [
-			{
-				"uri": "iso6523-actorid-upis::9934:12345678903"
-			}
-		],
 		"inboxes": [
 			{
 				"scheme": "9934",
@@ -76,11 +71,6 @@
 			"country": "HR",
 			"code": "11111111119"
 		},
-		"endpoints": [
-			{
-				"uri": "iso6523-actorid-upis::9934:11111111119"
-			}
-		],
 		"inboxes": [
 			{
 				"scheme": "9934",

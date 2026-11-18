@@ -78,6 +78,68 @@ The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
 invoice is paid. The regime adds the legal VAT note, and the UBL export writes
 `HRObracunPDVPoNaplati`.
 
+## Exemption reasons
+
+Every exempt (E) or not taxable (O) line and document level charge needs an
+exemption reason (HR-BR-13, HR-BR-36). The UBL export writes the text of the
+invoice's VAT note for its category, except for an amount left out of the VAT
+base (`POVNAK`, `PP`, `PPMV` or `N`). That amount gets the name of its label:
+"Povratna naknada", "Porez na potrošnju", "Posebni porez na motorna vozila" or
+"Neoporeziva naknada", as the official examples write it on a POVNAK, PP or
+PPMV charge. So the `exempt` VAT note gives the legal ground of the exempt
+supplies, and it is also the one reason of the EN 16931 VAT breakdown, where
+all E amounts share one entry (BR-E-01).
+
+To give a line or charge a reason of its own, such as "Turistička pristojba"
+for a tourist tax, set the meta `hr-eracun-tax-exemption-reason` on the line's
+item, or on the charge or discount. The import sets it when a received reason
+differs from the one the export would write.
+
+## Supplier
+
+A supplier in the VAT system gives its Croatian VAT number in `tax_id`, and
+the export writes it as the seller's VAT identifier (BT-31), `HR<OIB>`. A
+supplier outside the VAT system, such as a small taxpayer, has no VAT number:
+its `tax_id` has only the country, which keeps the regime, and its OIB goes in
+an `OIB` identity:
+
+```yaml
+supplier:
+  tax_id:
+    country: "HR"
+  identities:
+    - type: OIB
+      code: "12345678903"
+```
+
+The export writes that OIB as the seller's legal registration (BT-30), as its
+tax registration (BT-32) with the scheme `FRE`, and as its eRačun address
+`9934:<OIB>`, as in the official example "eRacun-Nije u sustavu PDV". An `OIB`
+identity with no scope gets the legal scope, unless another identity already
+has it. The invoice must not charge VAT, and its S, Z, E and AE taxes need the
+`OIB` identity. Importing an eRačun with a BT-32 and no BT-31 gives the same
+supplier. The `hr-fiskal-b2c-v1` addon takes the same party, and gobl.fr.ctc
+models a French supplier the same way, with a SIREN identity.
+
+## eRačun addresses and buyers
+
+Both parties need an eRačun address, written as the UBL `EndpointID` (BT-34,
+BT-49). Every participant is registered in AMS under its OIB, as
+`iso6523-actorid-upis::9934:<OIB>`, and may also be registered under other
+ISO 6523 identifiers, such as a GLN (`0088`). The addon gives a party with an
+OIB, from its Croatian VAT number or an `OIB` identity, and no address the
+address `9934:<OIB>`. An address given with the scheme `9934` must be a valid
+OIB, the party's own when it has one. Other schemes are accepted as given.
+
+An eRačun goes only to a taxpayer established in Croatia (Fiscalisation Act,
+Art. 2(24) and 38), so a customer with a foreign tax ID is refused, even though
+the HR schematron accepts foreign parties. The customer also needs its OIB,
+which CIS records for every eRačun: a Croatian VAT number, an `OIB` identity or
+a `9934:<OIB>` address. An intra-community supply, or any invoice to a foreign
+buyer, is issued on paper or in another form the tax rules accept (Tax
+Administration FAQ, eRačun fiscalization, question 8). An export (`G`) to a
+Croatian buyer is still an eRačun.
+
 ## Operator
 
 An eRačun names its operator, the person who issued it: a label in

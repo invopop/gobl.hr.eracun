@@ -24,9 +24,9 @@ const taxCategoryPrefix = "HR:"
 // VAT base that belong to another tax, as the HR extension breaks them down.
 // The others, such as a non-taxable fee (N), keep VAT.
 var passThroughTaxSchemes = map[cbc.Code]string{
-	eracun.TaxCategoryPP:     "LOC",
-	eracun.TaxCategoryPOVNAK: "OTH",
-	eracun.TaxCategoryPPMV:   "CAR",
+	eracun.TaxLabelPP:     "LOC",
+	eracun.TaxLabelPOVNAK: "OTH",
+	eracun.TaxLabelPPMV:   "CAR",
 }
 
 // exportHR applies the HR CIUS rules to an exported invoice.
@@ -47,7 +47,7 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 		return err
 	}
 	exportSellerContactPoint(inv, out)
-	exportSellerTaxRegistration(out)
+	exportSellerTaxRegistration(inv, out)
 	exportPartyOIB(inv.Supplier, out.AccountingSupplierParty.Party)
 	exportPartyOIB(inv.Customer, out.AccountingCustomerParty.Party)
 	exportPaymentMeansText(inv, out)
@@ -180,10 +180,13 @@ func exportSellerContactPoint(inv *bill.Invoice, out *goblubl.Invoice) {
 // (BT-32), which the HR CIUS uses for a seller outside the VAT system.
 const taxSchemeOutsideVAT = "FRE"
 
-// exportSellerTaxRegistration gives the tax registration (BT-32) of a seller
-// outside the VAT system, one without a VAT identifier (BT-31), the tax
-// scheme the HR CIUS uses, where gobl.ubl writes LOC.
-func exportSellerTaxRegistration(out *goblubl.Invoice) {
+// exportSellerTaxRegistration writes the tax registration (BT-32) of a
+// seller outside the VAT system, one without a VAT identifier (BT-31), with
+// the tax scheme the HR CIUS uses. gobl.ubl writes each identity with the tax
+// scope there, with its type or LOC as the scheme, and nothing for an OIB
+// identity with the legal scope, so the OIB is added when it isn't there. An
+// HR seller's tax registration is its OIB (HR-BR-53).
+func exportSellerTaxRegistration(inv *bill.Invoice, out *goblubl.Invoice) {
 	p := out.AccountingSupplierParty.Party
 	if p == nil {
 		return
@@ -193,10 +196,24 @@ func exportSellerTaxRegistration(out *goblubl.Invoice) {
 			return
 		}
 	}
+	oib := cbc.CodeEmpty
+	if !eracun.PartyHasVATNumber(inv.Supplier) {
+		oib = eracun.PartyOIB(inv.Supplier)
+	}
+	written := false
 	for _, pts := range p.PartyTaxScheme {
 		if pts.TaxScheme != nil {
 			pts.TaxScheme.ID.Value = taxSchemeOutsideVAT
 		}
+		if pts.CompanyID != nil && eracun.NormalizeOIB(pts.CompanyID.Value) == oib {
+			written = true
+		}
+	}
+	if oib != cbc.CodeEmpty && !written {
+		p.PartyTaxScheme = append(p.PartyTaxScheme, goblubl.PartyTaxScheme{
+			CompanyID: &goblubl.IDType{Value: oib.String()},
+			TaxScheme: &goblubl.TaxScheme{ID: goblubl.IDType{Value: taxSchemeOutsideVAT}},
+		})
 	}
 }
 
@@ -283,8 +300,8 @@ func exportLineTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) error {
 			if v := tc.Ext.Get(cef.ExtKeyVATEX).String(); v != "" {
 				ctc.TaxExemptionReasonCode = &v
 			}
-			if n := taxNote(inv, tc.Ext); n != nil {
-				ctc.TaxExemptionReason = &n.Text
+			if r, ok := exemptionReason(inv, tc.Ext); ok {
+				ctc.TaxExemptionReason = &r
 			}
 		}
 		if reason, ok := keptExemptionReason(l.Item.Meta, tc.Ext); ok {
@@ -305,8 +322,9 @@ func keptExemptionReason(meta cbc.Meta, ext tax.Extensions) (string, bool) {
 }
 
 // exportChargeTaxCategories names the tax category of each document level
-// charge and allowance (HR-BR-11), and writes back an exemption reason kept
-// on import (HR-BT-7).
+// charge and allowance (HR-BR-11), writes exemptionReason in place of the VAT
+// note gobl.ubl writes, which differs only for an amount left out of the VAT
+// base, and writes back an exemption reason of its own (HR-BT-7).
 func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 	documentCharges(out, inv, func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta) {
 		tc := ts.Get(tax.CategoryVAT)
@@ -318,6 +336,9 @@ func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 				continue
 			}
 			cat.Name = taxCategoryName(tc.Ext)
+			if r, ok := exemptionReason(inv, tc.Ext); ok {
+				cat.TaxExemptionReason = &r
+			}
 			if reason, ok := keptExemptionReason(*meta, tc.Ext); ok {
 				cat.TaxExemptionReason = &reason
 			}
@@ -388,7 +409,7 @@ func hrTotals(inv *bill.Invoice, vat *tax.CategoryTotal) (*HRTaxTotal, *HRLegalM
 			Percent:     "0",
 			HRTaxScheme: HRTaxScheme{ID: goblubl.TaxSchemeVAT},
 		}
-		if label.In(eracun.PassThroughTaxCategories...) {
+		if label.In(eracun.PassThroughTaxLabels...) {
 			cat.ID = en16931.TaxCategoryOutsideScope.String()
 			if scheme, ok := passThroughTaxSchemes[label]; ok {
 				cat.HRTaxScheme.ID = scheme
