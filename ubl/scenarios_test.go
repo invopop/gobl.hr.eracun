@@ -95,6 +95,13 @@ var scenarios = []scenario{
 			line("Kruh", 200, vat(tax.KeyStandard, tax.RateSuperReduced)),
 		)
 	}},
+	// The VAT of these lines rounds apart: the breakdown shows each rate's
+	// amount rounded, which GOBL's precise rule doesn't add up to (BR-CO-14).
+	{name: "standard 13% and 25% lines whose VAT rounds apart", edit: roundingApart},
+	{name: "precise rounding", edit: func(inv *bill.Invoice) {
+		roundingApart(inv)
+		inv.Tax.Rounding = tax.RoundingRulePrecise
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-24", rule: "BR-CO-14"},
 	{name: "prices include VAT", edit: func(inv *bill.Invoice) {
 		inv.Tax.PricesInclude = tax.CategoryVAT
 	}},
@@ -253,6 +260,16 @@ var scenarios = []scenario{
 func export(inv *bill.Invoice) {
 	inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExport, "")}
 	addNote(inv, tax.KeyExport, "Oslobođeno PDV čl. 45. Zakona o PDV-u")
+}
+
+// roundingApart gives the invoice a 1.21 dish at 13% and a 10.03 wine at
+// 25%. Their VAT is 0.1573 + 2.5075: 2.66 rounded once, as the precise rule
+// does, and 0.16 + 2.51 = 2.67 rounded per rate, as the breakdown shows it.
+func roundingApart(inv *bill.Invoice) {
+	inv.Lines = []*bill.Line{
+		line("Jelo", 121, vat(tax.KeyStandard, tax.RateReduced)),
+		line("Vino", 1003, vat(tax.KeyStandard, tax.RateGeneral)),
+	}
 }
 
 func intraCommunity(inv *bill.Invoice) {

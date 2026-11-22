@@ -178,6 +178,16 @@ issues the corrective document now, so it doesn't keep the original's issue
 time; if the correction is given an issue date other than today, set its
 `issue_time` too.
 
+## Rounding
+
+An eRačun's VAT total must be the sum of its VAT breakdown amounts, each one
+its base times its rate, rounded to the cent (BR-CO-14, BR-CO-17). GOBL's
+default `precise` rounding rounds the VAT once, on the sum of the unrounded
+amounts, which can leave the total a cent off the breakdown on an invoice with
+more than one VAT rate. An invoice with no `tax.rounding` is given `currency`,
+which rounds each amount before adding them up, and an invoice that sets any
+other rule is rejected.
+
 ## Validation
 
 Rules register under the `HR-ERACUN` namespace, guarded so they apply only when

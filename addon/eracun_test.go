@@ -653,6 +653,62 @@ func TestInvoiceIssueTime(t *testing.T) {
 	})
 }
 
+// roundingApartInvoice has a 1.21 dish at 13% and a 10.03 wine at 25%. The
+// VAT is 0.1573 + 2.5075: 2.66 rounded once, as the precise rule does, but
+// 0.16 + 2.51 = 2.67 rounded per rate, as the VAT breakdown shows it.
+func roundingApartInvoice() *bill.Invoice {
+	inv := testInvoice()
+	line := func(name string, cents int64, rate cbc.Key) *bill.Line {
+		return &bill.Line{
+			Quantity: num.MakeAmount(1, 0),
+			Item: &org.Item{
+				Name:       name,
+				Price:      num.NewAmount(cents, 2),
+				Identities: []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "56.10.11"}},
+			},
+			Taxes: tax.Set{{Category: tax.CategoryVAT, Rate: rate}},
+		}
+	}
+	inv.Lines = []*bill.Line{line("Jelo", 121, tax.RateReduced), line("Vino", 1003, tax.RateGeneral)}
+	return inv
+}
+
+func TestInvoiceRounding(t *testing.T) {
+	t.Run("currency when not given", func(t *testing.T) {
+		inv := roundingApartInvoice()
+		require.NoError(t, inv.Calculate())
+		assert.Equal(t, tax.RoundingRuleCurrency, inv.Tax.Rounding)
+		vat := inv.Totals.Taxes.Category(tax.CategoryVAT)
+		assert.Equal(t, "2.67", vat.Amount.String())
+		assert.Equal(t, "0.16", vat.Rates[0].Amount.String())
+		assert.Equal(t, "2.51", vat.Rates[1].Amount.String())
+		assert.Equal(t, "13.91", inv.Totals.Payable.String())
+		require.NoError(t, rules.Validate(inv))
+	})
+	t.Run("invoice without tax", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Tax = nil
+		require.NoError(t, inv.Calculate())
+		require.NotNil(t, inv.Tax)
+		assert.Equal(t, tax.RoundingRuleCurrency, inv.Tax.Rounding)
+	})
+	t.Run("currency kept", func(t *testing.T) {
+		inv := roundingApartInvoice()
+		inv.Tax.Rounding = tax.RoundingRuleCurrency
+		require.NoError(t, inv.Calculate())
+		assert.Equal(t, tax.RoundingRuleCurrency, inv.Tax.Rounding)
+		require.NoError(t, rules.Validate(inv))
+	})
+	t.Run("precise refused", func(t *testing.T) {
+		inv := roundingApartInvoice()
+		inv.Tax.Rounding = tax.RoundingRulePrecise
+		require.NoError(t, inv.Calculate())
+		assert.Equal(t, tax.RoundingRulePrecise, inv.Tax.Rounding)
+		assert.Equal(t, "2.66", inv.Totals.Taxes.Category(tax.CategoryVAT).Amount.String())
+		assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-24")
+	})
+}
+
 func TestCorrectionIssueTime(t *testing.T) {
 	t.Run("issued now", func(t *testing.T) {
 		inv := testInvoice()

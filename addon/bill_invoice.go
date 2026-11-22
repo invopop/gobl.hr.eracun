@@ -82,9 +82,24 @@ func normalizeInvoice(inv *bill.Invoice) {
 		return
 	}
 	normalizeIssueTime(inv)
+	normalizeRounding(inv)
 	assignOIBScope(inv.Supplier)
 	normalizePartyEndpoint(inv.Supplier)
 	normalizePartyEndpoint(inv.Customer)
+}
+
+// normalizeRounding sets the currency rounding rule on an invoice that gives
+// none. EN 16931 checks the amounts the invoice shows: each VAT breakdown
+// amount is its base times its rate, rounded (BR-CO-17), and the VAT total is
+// their sum (BR-CO-14). GOBL's default precise rule rounds the sum of the
+// unrounded amounts instead, which can leave the total a cent off the
+// breakdown on an invoice with more than one VAT rate. gobl.dk.oioubl sets
+// the rule the same way for its own sum rule (F-INV126). The eu-en16931-v2017
+// addon this one requires gives the invoice its tax object first.
+func normalizeRounding(inv *bill.Invoice) {
+	if inv.Tax.Rounding == cbc.KeyEmpty {
+		inv.Tax.Rounding = tax.RoundingRuleCurrency
+	}
 }
 
 // normalizeIssueTime sets the issue time HR-BR-2 requires to the current
@@ -147,6 +162,11 @@ func billInvoiceRules() *rules.Set {
 				rules.Assert("04", "invoice tax ext hr-eracun-process is required and must be P1 to P12 or P99:<label> (HR-BR-34)",
 					tax.ExtensionsRequire(ExtKeyProcess),
 					tax.ExtensionHasValidCode(ExtKeyProcess),
+				),
+			),
+			rules.Field("rounding",
+				rules.AssertIfPresent("24", "invoice tax rounding must be currency, so the VAT breakdown amounts add up to the VAT total (BR-CO-14); leave it empty to have it set",
+					is.In(tax.RoundingRuleCurrency),
 				),
 			),
 		),

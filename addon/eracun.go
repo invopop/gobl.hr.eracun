@@ -93,6 +93,11 @@ func newAddon() *tax.AddonDef {
 				day needs its issue time. A corrective document is issued now, so it
 				doesn't keep the original's issue time.
 
+				Amounts are rounded to the cent before they are added up, so the
+				VAT total is the sum of the VAT breakdown amounts, as EN 16931
+				requires: an invoice with no rounding rule is given the currency
+				rule, and one that sets another rule is refused.
+
 				Statuses are application responses the buyer sends the supplier,
 				each with one line about one invoice. A rejection needs a
 				description and one reason with an N, U or O rejection reason code,

@@ -4,7 +4,7 @@
 		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
 		"dig": {
 			"alg": "sha256",
-			"val": "157ad367a483dd8b132b24ff7c76c74e1f73ce2abacb184154bb32f4fa70eaa2"
+			"val": "704cf1d9b2f6e7a802c5127901e8646b8a1b11d3238b18cc23145f5760ace5ca"
 		},
 		"from": "iso6523-actorid-upis::9934:12345678903",
 		"to": "iso6523-actorid-upis::9934:11111111119"
@@ -23,6 +23,7 @@
 		"issue_time": "12:00:00",
 		"currency": "EUR",
 		"tax": {
+			"rounding": "currency",
 			"ext": {
 				"hr-eracun-process": "P1",
 				"untdid-document-type": "380"
