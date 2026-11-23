@@ -25,7 +25,9 @@ const (
 // HR VAT category labels (HR-TB-2, "HR oznaka kategorije PDV-a"), the codes of
 // the ExtKeyTaxCategory extension. They are not GOBL tax categories: POVNAK,
 // PP and PPMV are amounts collected for another tax or fee, outside the VAT
-// base, so TaxLabelPP is not the hr regime's consumption tax category.
+// base. An issuer charges the consumption tax with the hr regime's PP tax
+// category on its lines, which the UBL export writes as an exempt charge with
+// TaxLabelPP; the label is how a received eRačun carries it.
 const (
 	TaxLabelPDV25  cbc.Code = "PDV25"
 	TaxLabelPDV13  cbc.Code = "PDV13"

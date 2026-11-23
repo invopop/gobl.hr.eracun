@@ -71,7 +71,7 @@ from gobl.ubl, or `convert.Import`/`convert.Export`.
 | Key | Description |
 | --- | --- |
 | `hr-eracun-process` | Business process (BT-23), written to the UBL `ProfileID`: `P1` to `P12`, or `P99:` followed by a label agreed with the buyer. |
-| `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`) and any other non-taxable fee charged with taxable items (`N`), which are set on an exempt combo. |
+| `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`) and any other non-taxable fee charged with taxable items (`N`), which are set on an exempt combo. An issuer charges the consumption tax with the regime's `PP` tax instead (see [Consumption tax (PP)](#consumption-tax-pp)); the label `PP` is how a received eRačun carries it. |
 | `hr-eracun-rejection-reason` | Kind of reason for rejecting an invoice (AR-BT-12): `N`, `U` or `O`, the same code the buyer reports to the Tax Administration. |
 
 The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
@@ -94,6 +94,59 @@ To give a line or charge a reason of its own, such as "Turistička pristojba"
 for a tourist tax, set the meta `hr-eracun-tax-exemption-reason` on the line's
 item, or on the charge or discount. The import sets it when a received reason
 differs from the one the export would write.
+
+## Consumption tax (PP)
+
+The consumption tax (porez na potrošnju) on drinks served in catering is the
+`hr` regime's tax category `PP`. Charge it on each line it applies to, beside
+the line's VAT, at the rate the municipality or city sets, up to 3%:
+
+```yaml
+lines:
+  - quantity: "3"
+    item:
+      name: "Pivo 0,5 l"
+      price: "4.00"
+    taxes:
+      - cat: VAT
+        rate: general
+      - cat: PP
+        percent: "3%"
+```
+
+The HR CIUS has no tax of that kind: it carries PP as an amount left out of
+the VAT base. The UBL export writes it the way the official example
+"eRacun-PDV-NEOP-PP-trosak" does:
+
+- one document level charge per PP rate, exempt from VAT (`E`, named `HR:PP`),
+  with the PP of the lines at that rate as its amount, their net amounts as
+  its base and the rate as its multiplier;
+- an exempt entry for those charges in the VAT breakdown, and an entry out of
+  the VAT scope (`O`) under the `LOC` scheme in the HR breakdown;
+- the VAT alone as the VAT total (BT-110), and the PP charges in the tax
+  exclusive amount (BT-109) and the charges total (BT-108).
+
+Each line with PP also gets the item property `HR:PP` with its percent, so
+the buyer can tell which lines a charge covers. The HR CIUS has no element for
+that, so the property is this module's own convention, and a line with PP
+must not have an attribute of that name.
+
+The export can't write PP that has no base in the lines, so PP on a document
+level discount or charge is rejected: discount or charge the lines instead. A
+line with PP needs a VAT combo too, and a supplier outside the VAT system
+can't charge PP yet. Nor can an invoice with amounts not subject to VAT (O):
+EN 16931 allows no exempt amount beside them (BR-O-11). An invoice with the PP
+tax on its lines can't also have a line, charge or discount with the label
+`hr-eracun-tax-category: PP`, the form received invoices carry PP in.
+
+Limits:
+
+- Importing an eRačun reads PP as that exempt charge, with the `HR:PP` item
+  attributes, not as the PP tax on the lines.
+- A price that includes VAT (`prices_include: VAT`) doesn't include PP, which
+  is added on top of it.
+- A document level discount without PP lowers the VAT base, but not the PP
+  base.
 
 ## Supplier
 
@@ -225,7 +278,7 @@ Tax Administration's schematron, which the tests run (see below).
 
 | Module | Waits for | Replaced by | Pin |
 | --- | --- | --- | --- |
-| `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite on the Slovakia template, which [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) now carries) | branch commit `70ccde1c` | the gobl release that includes it, or a `main` pseudo-version after merge |
+| `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite on the Slovakia template, which [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) now carries) | branch commit `8558e34a`, which adds the `PP` consumption tax category | the gobl release that includes it, or a `main` pseudo-version after merge |
 | `github.com/invopop/gobl.ubl` | the `ExtensionContent` fix that registers extension data types ([invopop/gobl.ubl#183](https://github.com/invopop/gobl.ubl/pull/183), branch `extension-content-any`), then the generic fields the HR format uses (`SellerContact`, tax category `Name`), restacked on that fix ([invopop/gobl.ubl#179](https://github.com/invopop/gobl.ubl/pull/179), branch `eu3-18-hr-fields`) | branch commit `e1af3b2`, the head of #179 (with #183 merged in) | the gobl.ubl release that includes both |
 
 To follow a newer commit of either branch, run for example

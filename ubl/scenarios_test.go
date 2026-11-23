@@ -12,6 +12,7 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
 	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/pay"
@@ -154,6 +155,109 @@ var scenarios = []scenario{
 	},
 		check: checks(lineReason(1, "Oslobođeno PDV-a"), chargeReason(0, "Porez na potrošnju")),
 	},
+
+	// The hr regime's consumption tax (PP) on the lines, which the export
+	// writes as the HR CIUS carries it: an exempt charge per rate (CIUS 5.2).
+	{name: "PP on a 25% line", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+	}, check: chargeReason(0, "Porez na potrošnju")},
+	{name: "PP before VAT on its line", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{pp("3%"), vat(tax.KeyStandard, tax.RateGeneral)}
+	}, check: lineLabel(0, "HR:PDV25")},
+	{name: "PP at two rates beside a 13% line without it", edit: func(inv *bill.Invoice) {
+		*inv = *catering()
+	}},
+	{name: "PP on 13% and 25% lines whose VAT rounds apart", edit: func(inv *bill.Invoice) {
+		roundingApart(inv)
+		for _, l := range inv.Lines {
+			l.Taxes = append(l.Taxes, pp("3%"))
+		}
+	}},
+	{name: "PP with prices that include VAT", edit: func(inv *bill.Invoice) {
+		inv.Tax.PricesInclude = tax.CategoryVAT
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+	}},
+	{name: "PP on a line with a discount", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Discounts = []*bill.LineDiscount{{Reason: "Popust", Percent: num.NewPercentage(10, 2)}}
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+	}},
+	{name: "PP beside a document discount without it", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+		inv.Discounts = []*bill.Discount{{Reason: "Popust", Amount: num.MakeAmount(1000, 2),
+			Taxes: tax.Set{vat(tax.KeyStandard, tax.RateGeneral)}}}
+	}},
+	{name: "PP on an exempt line", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
+		addNote(inv, tax.KeyExempt, "Oslobođeno PDV-a")
+	}, check: lineReason(0, "Oslobođeno PDV-a")},
+	{name: "PP beside a pass-through POVNAK line", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+		inv.Lines = append(inv.Lines, line("Povratna naknada", 7, passThrough(eracun.TaxLabelPOVNAK)))
+		addNote(inv, tax.KeyExempt, "Povratna naknada")
+	}},
+	{name: "PP in US dollars", edit: func(inv *bill.Invoice) {
+		inv.Currency = "USD"
+		inv.ExchangeRates = []*currency.ExchangeRate{{From: "USD", To: "EUR", Amount: num.MakeAmount(9, 1)}}
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+	}},
+	{name: "PP on a credit note", edit: func(inv *bill.Invoice) {
+		inv.Type = bill.InvoiceTypeCreditNote
+		inv.Tax.Ext = inv.Tax.Ext.Set(eracun.ExtKeyProcess, "P10")
+		inv.Preceding = []*org.DocumentRef{{Code: "1-P1-1", IssueDate: cal.NewDate(2026, 2, 1)}}
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+	}},
+	{name: "PP above 3%", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("4%"))
+	}, fault: "GOBL-HR-ERACUN-TAX-COMBO-03"},
+	{name: "negative PP", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("-3%"))
+	}, fault: "GOBL-HR-ERACUN-TAX-COMBO-03"},
+	{name: "PP without VAT on its line", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{pp("3%")}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-26"},
+	{name: "PP line with its own HR:PP attribute", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+		inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: "HR:PP", Text: "3"}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-27"},
+	{name: "PP on a document discount", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+		inv.Discounts = []*bill.Discount{{Reason: "Popust", Amount: num.MakeAmount(1000, 2),
+			Taxes: tax.Set{vat(tax.KeyStandard, tax.RateGeneral), pp("3%")}}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-28"},
+	{name: "PP on a document charge", edit: func(inv *bill.Invoice) {
+		inv.Charges = []*bill.Charge{{Reason: "Usluga", Amount: num.MakeAmount(1000, 2),
+			Taxes: tax.Set{vat(tax.KeyStandard, tax.RateGeneral), pp("3%")}}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-29"},
+	{name: "PP beside a pass-through PP charge", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+		inv.Charges = []*bill.Charge{{
+			Reason: "Porez na potrošnju",
+			Amount: num.MakeAmount(300, 2),
+			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
+		}}
+		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+	{name: "PP beside a pass-through PP line", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+		inv.Lines = append(inv.Lines, line("Porez na potrošnju", 300, passThrough(eracun.TaxLabelPP)))
+		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+	{name: "PP beside an outside scope line", edit: func(inv *bill.Invoice) {
+		inv.Supplier = &org.Party{
+			Name:       "Obrt A",
+			Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
+			Addresses:  []*org.Address{{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"}},
+			People:     []*org.Person{operator()},
+		}
+		inv.Customer = customerWithoutVATNumber()
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, ""), pp("3%")}
+		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-32", rule: "BR-O-11"},
+	{name: "PP from an issuer outside VAT", edit: func(inv *bill.Invoice) {
+		inv.Supplier = supplierOutsideVAT()
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
+		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-31"},
 
 	// An issuer outside the VAT system: a tax ID with only the country and its
 	// OIB as an identity.

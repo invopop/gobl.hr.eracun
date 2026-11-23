@@ -248,6 +248,76 @@ func TestInvoiceRules(t *testing.T) {
 			outsideVAT(inv)
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-13"},
+		{"PP above 3%", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(31, 3)))
+		}, "GOBL-HR-ERACUN-TAX-COMBO-03"},
+		{"negative PP", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(-3, 2)))
+		}, "GOBL-HR-ERACUN-TAX-COMBO-03"},
+		{"PP without VAT on its line", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = tax.Set{consumptionTax(num.MakePercentage(3, 2))}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-26"},
+		{"PP line with an HR:PP attribute", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
+			inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: eracun.ItemAttributeConsumptionTax, Text: "3"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-27"},
+		{"PP on a document discount", func(inv *bill.Invoice) {
+			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{
+				{Category: tax.CategoryVAT, Rate: tax.RateGeneral}, consumptionTax(num.MakePercentage(3, 2)),
+			}}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-28"},
+		{"PP on a document charge", func(inv *bill.Invoice) {
+			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{
+				{Category: tax.CategoryVAT, Rate: tax.RateGeneral}, consumptionTax(num.MakePercentage(3, 2)),
+			}}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-29"},
+		{"PP on a line beside a pass-through PP charge", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
+			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(300, 2), Taxes: tax.Set{{
+				Category: tax.CategoryVAT,
+				Key:      tax.KeyExempt,
+				Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
+			}}}}
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+		{"PP on a line beside a pass-through PP discount", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
+			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(100, 2), Taxes: tax.Set{{
+				Category: tax.CategoryVAT,
+				Key:      tax.KeyExempt,
+				Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
+			}}}}
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+		{"PP on a line beside a pass-through PP line", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
+			inv.Lines = append(inv.Lines, &bill.Line{
+				Quantity: num.MakeAmount(1, 0),
+				Item: &org.Item{
+					Name:       "Porez na potrošnju",
+					Price:      num.NewAmount(300, 2),
+					Identities: []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "62.20.20"}},
+				},
+				Taxes: tax.Set{{
+					Category: tax.CategoryVAT,
+					Key:      tax.KeyExempt,
+					Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
+				}},
+			})
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+		{"PP beside an O line", func(inv *bill.Invoice) {
+			inv.Supplier.TaxID = nil
+			inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+			inv.Customer.TaxID = &tax.Identity{Country: "HR"}
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}, consumptionTax(num.MakePercentage(3, 2))}
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope, Text: "Nije predmet oporezivanja"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-32"},
+		{"PP from a supplier with no VAT number", func(inv *bill.Invoice) {
+			outsideVAT(inv)
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-31"},
 		{"supplier with no VAT number and no OIB identity", func(inv *bill.Invoice) {
 			outsideVAT(inv)
 			inv.Supplier.Identities = nil
@@ -870,4 +940,30 @@ func TestEndpointNotDerivedBesideSchemeInbox(t *testing.T) {
 	require.NoError(t, inv.Calculate())
 	require.NoError(t, rules.Validate(inv))
 	assert.Empty(t, inv.Supplier.Endpoints)
+}
+
+// consumptionTax is the hr regime's consumption tax (PP) at a percent.
+func consumptionTax(p num.Percentage) *tax.Combo {
+	return &tax.Combo{Category: hr.TaxCategoryPP, Percent: &p}
+}
+
+func TestConsumptionTaxValid(t *testing.T) {
+	for _, p := range []num.Percentage{num.MakePercentage(0, 2), num.MakePercentage(25, 3), num.MakePercentage(3, 2)} {
+		t.Run(p.String(), func(t *testing.T) {
+			inv := testInvoice()
+			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(p))
+			// A line's own attributes stay, the HR:PP label aside.
+			inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: "Zapremina", Text: "0,5 l"}}
+			require.NoError(t, inv.Calculate())
+			require.NoError(t, rules.Validate(inv))
+		})
+	}
+	t.Run("HR:PP attribute on a line without PP", func(t *testing.T) {
+		// An invoice imported from an eRačun keeps the attribute the export
+		// wrote, beside the PP charge.
+		inv := testInvoice()
+		inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: eracun.ItemAttributeConsumptionTax, Text: "3"}}
+		require.NoError(t, inv.Calculate())
+		require.NoError(t, rules.Validate(inv))
+	})
 }

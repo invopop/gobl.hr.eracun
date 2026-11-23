@@ -42,6 +42,6 @@ require (
 // commits. Pin both to released versions (or main pseudo-versions) once they
 // are merged; the README lists what each pin waits for.
 replace (
-	github.com/invopop/gobl => github.com/invopop/gobl v0.510.1-0.20261027164024-70ccde1c0e68
+	github.com/invopop/gobl => github.com/invopop/gobl v0.510.1-0.20261112105327-8558e34a3da4
 	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.99.1-0.20261029164417-e1af3b2988c5
 )

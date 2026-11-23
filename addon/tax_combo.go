@@ -78,6 +78,13 @@ func taxComboRules() *rules.Set {
 				),
 			),
 		),
+		rules.When(is.Func("is consumption tax", taxComboIsConsumptionTax),
+			rules.Field("percent",
+				rules.AssertIfPresent("03", "PP combo percent must be from 0% to 3%, the most a municipality may set (Local Taxes Act)",
+					is.Func("0% to 3%", consumptionTaxPercentValid),
+				),
+			),
+		),
 	)
 }
 

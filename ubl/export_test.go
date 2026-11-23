@@ -1,6 +1,7 @@
 package ubl_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/invopop/gobl/pay"
 	"github.com/invopop/gobl/regimes/hr"
 	"github.com/invopop/gobl/tax"
+	"github.com/invopop/phorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -735,4 +737,37 @@ func TestImportForeignSellerTaxRegistration(t *testing.T) {
 	require.True(t, ok)
 	assert.Nil(t, inv.Supplier.TaxID)
 	assert.Nil(t, org.IdentityForType(inv.Supplier.Identities, hr.IdentityTypeOIB))
+}
+
+// TestGOBLExamples exports the GOBL example invoices in ../examples/out, the
+// documents issuers start from, and checks the UBL against the schematron
+// (with -validate). Their GOBL side is checked by the module's TestExamples.
+func TestGOBLExamples(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("..", "examples", "out", "*.json"))
+	require.NoError(t, err)
+	var pc *phorm.Client
+	if *validate {
+		pc = phormClient(t)
+	}
+	n := 0
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		require.NoError(t, err)
+		env := new(gobl.Envelope)
+		require.NoError(t, json.Unmarshal(data, env))
+		if _, ok := env.Extract().(*bill.Invoice); !ok {
+			continue
+		}
+		n++
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+			require.NoError(t, err)
+			x, err := goblubl.Encode(out)
+			require.NoError(t, err)
+			if pc != nil {
+				validateXML(t, pc, hrubl.FormatHRCIUS.VESID(env.Extract()), x)
+			}
+		})
+	}
+	require.NotZero(t, n)
 }
