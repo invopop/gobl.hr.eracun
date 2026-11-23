@@ -188,6 +188,26 @@ more than one VAT rate. An invoice with no `tax.rounding` is given `currency`,
 which rounds each amount before adding them up, and an invoice that sets any
 other rule is rejected.
 
+## KPD classification
+
+A line item gives its KPD 2025 code (Klasifikacija proizvoda po
+djelatnostima) as an identity with the label `CG`, which the export writes to
+the item's classification code (BT-158) with `listID="CG"`:
+
+```yaml
+item:
+  name: "Proizvod"
+  identities:
+    - label: CG
+      code: "62.20.20"
+```
+
+Every line needs one, except on advance invoices and credit notes (HR-BR-25).
+A `CG` code on any document type must be written as the official code list
+writes it, three pairs of digits joined by dots, or the invoice is rejected.
+Only that form is checked: a well-formed code that is not in the list passes
+GOBL, and the Tax Administration's schematron refuses it (HR-BR-CL-2).
+
 ## Validation
 
 Rules register under the `HR-ERACUN` namespace, guarded so they apply only when

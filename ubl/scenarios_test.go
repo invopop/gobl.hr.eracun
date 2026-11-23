@@ -235,6 +235,15 @@ var scenarios = []scenario{
 	{name: "line without KPD", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Item.Identities = nil
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-12", rule: "HR-BR-25"},
+	{name: "KPD without dots", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "622020"}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-25", rule: "HR-BR-CL-2"},
+	{name: "credit note with a KPD without dots", edit: func(inv *bill.Invoice) {
+		inv.Type = bill.InvoiceTypeCreditNote
+		inv.Tax.Ext = inv.Tax.Ext.Set(eracun.ExtKeyProcess, "P10")
+		inv.Preceding = []*org.DocumentRef{{Code: "1-P1-1", IssueDate: cal.NewDate(2026, 2, 1)}}
+		inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "622020"}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-25", rule: "HR-BR-CL-2"},
 	{name: "buyer without a VAT number, standard line", edit: func(inv *bill.Invoice) {
 		inv.Customer = customerWithoutVATNumber()
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-11", rule: "HR-BR-S-1"},

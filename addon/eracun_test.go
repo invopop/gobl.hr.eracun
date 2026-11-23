@@ -216,6 +216,19 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
 		{"line without KPD", func(inv *bill.Invoice) { inv.Lines[0].Item.Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-12"},
+		{"KPD without dots", func(inv *bill.Invoice) {
+			inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "622020"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-25"},
+		{"KPD with four digits", func(inv *bill.Invoice) {
+			inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "62.20"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-25"},
+		{"KPD with eight digits", func(inv *bill.Invoice) {
+			inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "62.20.20.01"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-25"},
+		{"second KPD without dots", func(inv *bill.Invoice) {
+			inv.Lines[0].Item.Identities = append(inv.Lines[0].Item.Identities,
+				&org.Identity{Label: eracun.IdentityLabelKPD, Code: "622020"})
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-25"},
 		{"rate without HR tax category", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Rate = ""
 			inv.Lines[0].Taxes[0].Percent = num.NewPercentage(100, 3)
@@ -265,6 +278,29 @@ func TestInvoiceKPDNotRequiredOnCreditNotes(t *testing.T) {
 	inv.Type = bill.InvoiceTypeCreditNote
 	inv.Preceding = []*org.DocumentRef{{Code: "1-P1-1", IssueDate: cal.NewDate(2026, 2, 1)}}
 	inv.Lines[0].Item.Identities = nil
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+}
+
+// A document type that needs no KPD still has its KPD codes checked: the
+// official code list rule (HR-BR-CL-2) applies to every CG code.
+func TestInvoiceKPDFormOnCreditNotes(t *testing.T) {
+	inv := testInvoice()
+	inv.Type = bill.InvoiceTypeCreditNote
+	inv.Preceding = []*org.DocumentRef{{Code: "1-P1-1", IssueDate: cal.NewDate(2026, 2, 1)}}
+	inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "622020"}}
+	require.NoError(t, inv.Calculate())
+	assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-25")
+}
+
+// Only the KPD identity is held to the KPD form; the item's other
+// classifications and identities keep their own.
+func TestInvoiceKPDFormOnlyOnKPD(t *testing.T) {
+	inv := testInvoice()
+	inv.Lines[0].Item.Identities = append(inv.Lines[0].Item.Identities,
+		&org.Identity{Label: "STI", Code: "8471"},
+		&org.Identity{Code: "ABC-123"},
+	)
 	require.NoError(t, inv.Calculate())
 	require.NoError(t, rules.Validate(inv))
 }

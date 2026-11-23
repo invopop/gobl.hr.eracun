@@ -27,6 +27,11 @@ const SchemeIDOIB = "9934"
 // ItemClassificationCode listID.
 const IdentityLabelKPD = "CG"
 
+// kpdCodePattern is the form of a KPD 2025 code as the official code list
+// writes it (HR-BR-CL-2): three pairs of digits joined by dots. The form
+// alone is checked, not the list.
+const kpdCodePattern = `^\d{2}\.\d{2}\.\d{2}$`
+
 // firstIssueDate is the earliest issue date of an eRačun (HR-BR-40).
 var firstIssueDate = cal.MakeDate(2026, 1, 1)
 
@@ -279,6 +284,25 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
+		// Every document type, including those that need no KPD: the code
+		// list rule checks every CG code.
+		rules.Field("lines",
+			rules.Each(
+				rules.Field("item",
+					rules.Field("identities",
+						rules.Each(
+							rules.When(is.Func("KPD identity", identityIsKPD),
+								rules.Field("code",
+									rules.Assert("25", "line item KPD code (identity with label CG) must be a KPD 2025 code written as three pairs of digits joined by dots, such as 62.20.20 (HR-BR-CL-2)",
+										is.Matches(kpdCodePattern),
+									),
+								),
+							),
+						),
+					),
+				),
+			),
+		),
 	)
 }
 
@@ -477,6 +501,11 @@ func invoiceRequiresKPD(val any) bool {
 		return false
 	}
 	return inv.Tax == nil || !inv.Tax.Ext.Get(untdid.ExtKeyDocumentType).In(kpdExemptDocumentTypes...)
+}
+
+func identityIsKPD(val any) bool {
+	id, ok := val.(*org.Identity)
+	return ok && id != nil && id.Label == IdentityLabelKPD
 }
 
 func itemHasKPD(val any) bool {
