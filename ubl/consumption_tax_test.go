@@ -402,11 +402,7 @@ func TestConsumptionTaxStaysCharge(t *testing.T) {
 			// The HR:PP property gives only the rate, so two charges at one
 			// rate can't be told apart: both are 3% of the line's 100.00.
 			name: "two charges at one rate",
-			inv: func() *bill.Invoice {
-				inv := scenarioInvoice()
-				inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
-				return inv
-			},
+			inv:  ppOnALine,
 			edit: func(doc *goblubl.Invoice) {
 				doc.AllowanceCharge = append(doc.AllowanceCharge, doc.AllowanceCharge[0])
 				doc.TaxTotal[0].TaxSubtotal[1].TaxableAmount.Value = "6.00"
@@ -415,6 +411,37 @@ func TestConsumptionTaxStaysCharge(t *testing.T) {
 				m.ChargeTotalAmount.Value = "6.00"
 				m.TaxInclusiveAmount.Value = "131.00"
 				m.PayableAmount.Value = "131.00"
+			},
+		},
+		{
+			// The export would write the charge back with its own reason.
+			name: "a charge with a reason of its own",
+			inv:  ppOnALine,
+			edit: func(doc *goblubl.Invoice) {
+				doc.AllowanceCharge[0].AllowanceChargeReason = ptr("#HR:PP#Porez na potrošnju Grada Zagreba")
+			},
+		},
+		{
+			// The import keeps this reason in the charge's meta data.
+			name: "a charge with an exemption reason of its own",
+			inv:  ppOnALine,
+			edit: func(doc *goblubl.Invoice) {
+				doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason = ptr("Porez na potrošnju Grada Zagreba")
+			},
+		},
+		{
+			// The rate (BT-101) is optional; without it the charge has none.
+			name: "a charge without its rate",
+			inv:  ppOnALine,
+			edit: func(doc *goblubl.Invoice) {
+				doc.AllowanceCharge[0].MultiplierFactorNumeric = nil
+			},
+		},
+		{
+			name: "a rate the line gives in another form",
+			inv:  ppOnALine,
+			edit: func(doc *goblubl.Invoice) {
+				(*doc.InvoiceLines[0].Item.AdditionalItemProperty)[0].Value = "3%"
 			},
 		},
 		{
@@ -467,6 +494,17 @@ func TestConsumptionTaxStaysCharge(t *testing.T) {
 			assert.Equal(t, invoiceJSON(t, importUBLAsCharge(t, data)), invoiceJSON(t, got))
 		})
 	}
+}
+
+// ppOnALine is the base invoice with PP at 3% on its one line.
+func ppOnALine() *bill.Invoice {
+	inv := scenarioInvoice()
+	inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
+	return inv
+}
+
+func ptr(s string) *string {
+	return &s
 }
 
 // TestConsumptionTaxKeepsOtherAttributes checks that a line whose PP moves

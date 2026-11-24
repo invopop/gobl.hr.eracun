@@ -1,6 +1,7 @@
 package ubl
 
 import (
+	"bytes"
 	"encoding/json"
 	"slices"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/invopop/gobl/addons/eu/en16931"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/catalogues/untdid"
+	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/org"
@@ -21,6 +23,10 @@ import (
 // consumptionTaxName is the HR-TB-2 name of the consumption tax (porez na
 // potrošnju), HR:PP.
 var consumptionTaxName = taxCategoryPrefix + eracun.TaxLabelPP.String()
+
+// consumptionTaxReason is the reason of a PP charge (BT-104) and of its
+// exempt entry in the VAT breakdown, as the official example writes them.
+var consumptionTaxReason = "#" + consumptionTaxName + "#" + passThroughReasons[eracun.TaxLabelPP]
 
 // exportConsumptionTax restates the hr regime's consumption tax (PP) the way
 // the HR CIUS carries it, as in its example "eRacun-PDV-NEOP-PP-trosak" (CIUS
@@ -77,7 +83,7 @@ func exportConsumptionTax(inv *bill.Invoice, out *goblubl.Invoice) error {
 		base := goblubl.NewAmount(r.Base, ccy)
 		out.AllowanceCharge = append(out.AllowanceCharge, goblubl.AllowanceCharge{
 			ChargeIndicator:         true,
-			AllowanceChargeReason:   ptr("#" + consumptionTaxName + "#" + reason),
+			AllowanceChargeReason:   ptr(consumptionTaxReason),
 			MultiplierFactorNumeric: ptr(r.Percent.StringWithoutSymbol()),
 			Amount:                  goblubl.NewAmount(r.Amount, ccy),
 			BaseAmount:              &base,
@@ -95,7 +101,7 @@ func exportConsumptionTax(inv *bill.Invoice, out *goblubl.Invoice) error {
 			TaxCategory: goblubl.TaxCategory{
 				ID:                 &goblubl.IDType{Value: en16931.TaxCategoryExempt.String()},
 				Percent:            ptr("0"),
-				TaxExemptionReason: ptr("#" + consumptionTaxName + "#" + reason),
+				TaxExemptionReason: ptr(consumptionTaxReason),
 				TaxScheme:          &goblubl.TaxScheme{ID: goblubl.IDType{Value: goblubl.TaxSchemeVAT}},
 			},
 		})
@@ -170,21 +176,23 @@ func exportAccountingVATTotal(inv *bill.Invoice, out *goblubl.Invoice, vat num.A
 // regime's PP tax on the lines they cover, the shape the export writes them
 // from, so that an invoice exported here imports as it was issued.
 //
-// A PP charge is an exempt document level charge with the HR tax category
-// PP, a base and a rate. It moves onto the lines whose item attribute HR:PP
-// gives its rate, which lose that attribute, and the exempt VAT note goes too
-// when no exempt amount is left: the import read it from the VAT breakdown's
-// exempt entry, which the PP charges alone made up.
+// A PP charge moves when it is one the export would write: exempt from VAT,
+// with the HR tax category PP, a base, a rate and the export's reason, and
+// nothing the export wouldn't write back, such as a reason of its own. It
+// moves onto the lines whose item attribute HR:PP gives its rate, which lose
+// that attribute, and the exempt VAT note goes too when no exempt amount is
+// left: the import read it from the VAT breakdown's exempt entry, which the
+// PP charges alone made up.
 //
 // The move is made on a copy of the invoice, which replaces it only when the
 // copy calculates, at each rate moved, the base and amount of that rate's
 // charge, keeps the VAT, the total with tax and the payable amount (which
-// gobl.ubl refuses to see change), and breaks no rule the invoice didn't. So the lines' amounts add up to the
-// base, and each of them has VAT (rule 26). The supplier isn't outside VAT
-// (rule 31), nor are there O amounts (rule 32), and no PP charge is left
-// (rule 30): the PP of an invoice moves whole or not at all. Otherwise the
-// invoice stays as imported, such as the official example, which has no
-// HR:PP lines.
+// gobl.ubl refuses to see change), and breaks no rule more often than the
+// invoice did. The lines' amounts then add up to the charge's base, and each
+// of them has VAT (rule 26). The supplier isn't outside VAT (rule 31), there
+// are no O amounts (rule 32), and no PP charge is left (rule 30), so the PP of
+// an invoice moves whole or not at all. Otherwise the invoice stays as
+// imported, such as the official example, which has no HR:PP lines.
 //
 // It runs once the totals are reconciled, so a move can't hide a difference
 // from the declared totals, and gobl.ubl doesn't run it on an invoice tagged
@@ -192,7 +200,7 @@ func exportAccountingVATTotal(inv *bill.Invoice, out *goblubl.Invoice, vat num.A
 // document is only read.
 func importConsumptionTax(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error {
 	inv, _, ok := invoices(env, doc)
-	if !ok || !slices.ContainsFunc(inv.Charges, isConsumptionTaxCharge) {
+	if !ok || !slices.ContainsFunc(inv.Charges, isExportedConsumptionTaxCharge) {
 		return nil
 	}
 	data, err := json.Marshal(inv)
@@ -220,14 +228,14 @@ func importConsumptionTax(_ *goblubl.Format, doc goblubl.Document, env *gobl.Env
 	return nil
 }
 
-// moveConsumptionTax moves each PP charge with a base and a rate onto the
-// lines whose HR:PP attribute gives that rate, as the PP tax, and returns the
+// moveConsumptionTax moves each PP charge the export would write onto the
+// lines whose HR:PP attribute gives its rate, as the PP tax, and returns the
 // charges moved.
 func moveConsumptionTax(inv *bill.Invoice) []*bill.Charge {
 	var moved, kept []*bill.Charge
 	for _, c := range inv.Charges {
 		var lines []*bill.Line
-		if isConsumptionTaxCharge(c) && c.Percent != nil && c.Base != nil {
+		if isExportedConsumptionTaxCharge(c) {
 			for _, l := range inv.Lines {
 				if l != nil && l.Item != nil && hasConsumptionTaxAttribute(l.Item, *c.Percent) {
 					lines = append(lines, l)
@@ -254,12 +262,32 @@ func moveConsumptionTax(inv *bill.Invoice) []*bill.Charge {
 	return moved
 }
 
-// isConsumptionTaxCharge says whether the charge carries PP the way an
-// eRačun does: exempt from VAT, with the HR tax category PP.
-func isConsumptionTaxCharge(c *bill.Charge) bool {
-	tc := c.Taxes.Get(tax.CategoryVAT)
-	return tc != nil && tc.Ext.Get(eracun.ExtKeyTaxCategory) == eracun.TaxLabelPP &&
-		tc.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryExempt
+// isExportedConsumptionTaxCharge says whether the charge is PP at a rate
+// carried as the export writes it: its reason, base, rate and amount, and a
+// VAT combo exempt with the HR tax category PP, and nothing else. Moving it
+// onto the lines then loses nothing the export would write back.
+func isExportedConsumptionTaxCharge(c *bill.Charge) bool {
+	if c.Base == nil || c.Percent == nil {
+		return false
+	}
+	want := &bill.Charge{
+		Index:   c.Index,
+		Reason:  consumptionTaxReason,
+		Base:    c.Base,
+		Percent: c.Percent,
+		Amount:  c.Amount,
+		Taxes: tax.Set{{
+			Category: tax.CategoryVAT,
+			Key:      tax.KeyExempt,
+			Ext: tax.ExtensionsOf(cbc.CodeMap{
+				eracun.ExtKeyTaxCategory: eracun.TaxLabelPP,
+				untdid.ExtKeyTaxCategory: en16931.TaxCategoryExempt,
+			}),
+		}},
+	}
+	got, err := json.Marshal(c)
+	exp, err2 := json.Marshal(want)
+	return err == nil && err2 == nil && bytes.Equal(got, exp)
 }
 
 // hasConsumptionTaxAttribute says whether the item has the HR:PP attribute
@@ -317,20 +345,29 @@ func vatAmount(inv *bill.Invoice) num.Amount {
 	return a
 }
 
-// raisesNewFaults says whether the invoice with its PP moved breaks a rule,
-// by fault code, that the invoice as imported didn't.
+// raisesNewFaults says whether the invoice with its PP moved breaks a rule
+// more often than the invoice as imported. Faults are counted by code, since
+// their paths shift as the charges go.
 func raisesNewFaults(inv, moved *bill.Invoice) bool {
-	had := rules.Validate(inv)
-	faults := rules.Validate(moved)
-	if faults == nil {
-		return false
-	}
-	for _, f := range faults.List() {
-		if had == nil || !had.HasCode(f.Code()) {
+	had := faultCounts(inv)
+	for code, n := range faultCounts(moved) {
+		if n > had[code] {
 			return true
 		}
 	}
 	return false
+}
+
+// faultCounts provides how often the invoice breaks each rule: the number of
+// places each fault code is raised at.
+func faultCounts(inv *bill.Invoice) map[rules.Code]int {
+	counts := make(map[rules.Code]int)
+	if faults := rules.Validate(inv); faults != nil {
+		for _, f := range faults.List() {
+			counts[f.Code()] += len(f.Paths())
+		}
+	}
+	return counts
 }
 
 func consumptionTaxTotal(inv *bill.Invoice) *tax.CategoryTotal {

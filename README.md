@@ -140,22 +140,29 @@ tax on its lines can't also have a line, charge or discount with the label
 `hr-eracun-tax-category: PP`, the form received invoices carry PP in.
 
 Importing an eRačun moves its PP charges back onto the lines as the PP tax,
-so an invoice exported here comes back as it was issued. A charge moves onto
-the lines whose `HR:PP` item property gives its rate, and those lines lose
-the `HR:PP` attribute; the exempt VAT note goes too when no exempt amount is
-left, since the import read it from the exempt entry of the VAT breakdown
-that the PP charges alone made up. The move is exact or not made at all: the
-lines' amounts must add up to the charge's base, the PP they calculate to
-must be its amount, the VAT, the total with tax and the payable amount must
-stay the same, and the invoice must break no rule it didn't before. As an
-invoice can't have the PP tax beside a PP charge, either every PP charge moves
-or none does. Otherwise the import keeps PP the way the eRačun carries it, an
-exempt charge with the label `hr-eracun-tax-category: PP` and the `HR:PP`
-attributes on the lines, as for:
+so an invoice exported here comes back as it was issued. A charge written the
+way the export writes it moves onto the lines whose `HR:PP` item property
+gives its rate, and those lines lose the `HR:PP` attribute; the exempt VAT
+note goes too when no exempt amount is left, since the import read it from
+the exempt entry of the VAT breakdown that the PP charges alone made up. The
+move is exact or not made at all: the lines' amounts must add up to the
+charge's base, the PP they calculate to must be its amount, the VAT, the
+total with tax and the payable amount must stay the same, and the invoice
+must break no rule more often than before. As an invoice can't have the PP
+tax beside a PP charge, either every PP charge moves or none does. Otherwise
+the import keeps PP the way the eRačun carries it, an exempt charge with the
+label `hr-eracun-tax-category: PP` and the `HR:PP` attributes on the lines,
+as for:
 
 - an eRačun without `HR:PP` properties, such as the official example, since
   nothing in the HR CIUS ties a PP charge to its lines;
+- an `HR:PP` value that isn't a plain number such as `3` or `2.5`, for
+  example `3%` or `3,00`;
+- a PP charge without a rate (BT-101 is optional) or a base, or with anything
+  the export wouldn't write back the same: a reason or exemption reason of
+  its own, or a code, key, extension or meta data;
 - lines whose amounts don't add up to the base of the charge at their rate;
+- two PP charges at one rate, which the `HR:PP` property can't tell apart;
 - a supplier outside the VAT system, or amounts not subject to VAT (O), which
   the rules above refuse beside PP on the lines;
 - an invoice whose totals differ from those it declares, which gobl.ubl keeps
