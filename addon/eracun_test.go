@@ -273,41 +273,53 @@ func TestInvoiceRules(t *testing.T) {
 				{Category: tax.CategoryVAT, Rate: tax.RateGeneral}, consumptionTax(num.MakePercentage(3, 2)),
 			}}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-29"},
-		{"PP on a line beside a pass-through PP charge", func(inv *bill.Invoice) {
+		{"PP on a line beside a charge labelled PP", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
-			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(300, 2), Taxes: tax.Set{{
-				Category: tax.CategoryVAT,
-				Key:      tax.KeyExempt,
-				Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
-			}}}}
-			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"}}
+			inv.Charges = []*bill.Charge{{Reason: "Porez na potrošnju", Amount: num.MakeAmount(300, 2), Ext: outsideVATLabel(eracun.TaxLabelPP)}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
-		{"PP on a line beside a pass-through PP discount", func(inv *bill.Invoice) {
+		{"PP on a line beside a line labelled PP", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
-			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(100, 2), Taxes: tax.Set{{
-				Category: tax.CategoryVAT,
-				Key:      tax.KeyExempt,
-				Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
-			}}}}
-			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"}}
+			inv.Lines = append(inv.Lines, lineOutsideVAT("Porez na potrošnju", 300, eracun.TaxLabelPP))
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
-		{"PP on a line beside a pass-through PP line", func(inv *bill.Invoice) {
-			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
-			inv.Lines = append(inv.Lines, &bill.Line{
-				Quantity: num.MakeAmount(1, 0),
-				Item: &org.Item{
-					Name:       "Porez na potrošnju",
-					Price:      num.NewAmount(300, 2),
-					Identities: []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "62.20.20"}},
-				},
-				Taxes: tax.Set{{
-					Category: tax.CategoryVAT,
-					Key:      tax.KeyExempt,
-					Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
-				}},
-			})
-			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Porez na potrošnju"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+		{"pass-through category on an exempt combo", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Ext: outsideVATLabel(eracun.TaxLabelPOVNAK)}}
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Povratna naknada"}}
+		}, "GOBL-HR-ERACUN-TAX-COMBO-02"},
+		{"line without taxes and without a label", func(inv *bill.Invoice) {
+			l := lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK)
+			l.Ext = tax.Extensions{}
+			inv.Lines = append(inv.Lines, l)
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-33"},
+		{"line without taxes labelled as a VAT category", func(inv *bill.Invoice) {
+			inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelE))
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-33"},
+		{"charge without taxes labelled as a VAT category", func(inv *bill.Invoice) {
+			inv.Charges = []*bill.Charge{{Reason: "Dostava", Amount: num.MakeAmount(500, 2), Ext: outsideVATLabel(eracun.TaxLabelPDV25)}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-34"},
+		{"charge without taxes and without a reason", func(inv *bill.Invoice) {
+			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(500, 2)}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-27"},
+		{"line with taxes and a label of its own", func(inv *bill.Invoice) {
+			inv.Lines[0].Ext = outsideVATLabel(eracun.TaxLabelPOVNAK)
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-35"},
+		{"charge with taxes and a label of its own", func(inv *bill.Invoice) {
+			inv.Charges = []*bill.Charge{{Reason: "Dostava", Amount: num.MakeAmount(500, 2), Ext: outsideVATLabel(eracun.TaxLabelN),
+				Taxes: tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-36"},
+		{"deposit beside an O line", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = &tax.Identity{Country: "HR"}
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope, Text: "Nije predmet oporezivanja"}}
+			inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-32"},
+		{"deposit beside an export, customer without a tax ID", func(inv *bill.Invoice) {
+			inv.Customer.TaxID = nil
+			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExport}}
+			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExport, Text: "Izvoz"}}
+			inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
 		{"PP beside an O line", func(inv *bill.Invoice) {
 			inv.Supplier.TaxID = nil
 			inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
@@ -929,4 +941,59 @@ func TestConsumptionTaxValid(t *testing.T) {
 			require.NoError(t, rules.Validate(inv))
 		})
 	}
+}
+
+// outsideVATLabel is the HR tax category of an amount left out of the VAT
+// base, as the extensions of the line or charge that carries it.
+func outsideVATLabel(label cbc.Code) tax.Extensions {
+	return tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: label})
+}
+
+// lineOutsideVAT is a line left out of the VAT base: one with no taxes and
+// its HR tax category on the line.
+func lineOutsideVAT(name string, cents int64, label cbc.Code) *bill.Line {
+	return &bill.Line{
+		Quantity: num.MakeAmount(1, 0),
+		Item: &org.Item{
+			Name:       name,
+			Price:      num.NewAmount(cents, 2),
+			Identities: []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "22.22.19"}},
+		},
+		Ext: outsideVATLabel(label),
+	}
+}
+
+// TestAmountsOutsideVAT checks the two ways to write an amount left out of
+// the VAT base: a line of its own or a document level charge, neither with
+// taxes.
+func TestAmountsOutsideVAT(t *testing.T) {
+	inv := testInvoice()
+	inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 10, eracun.TaxLabelPOVNAK))
+	inv.Lines[1].Quantity = num.MakeAmount(240, 0)
+	inv.Charges = []*bill.Charge{
+		{Reason: "Turistička pristojba", Amount: num.MakeAmount(1000, 2)},
+		{Reason: "Posebni porez na motorna vozila", Amount: num.MakeAmount(200000, 2), Ext: outsideVATLabel(eracun.TaxLabelPPMV)},
+	}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+	assert.True(t, eracun.LineOutsideVAT(inv.Lines[1]))
+	assert.False(t, eracun.LineOutsideVAT(inv.Lines[0]))
+	assert.Equal(t, eracun.TaxLabelN, inv.Charges[0].Ext.Get(eracun.ExtKeyTaxCategory), "a charge without taxes is another fee not taxed, unless it says otherwise")
+	assert.Equal(t, eracun.TaxLabelPPMV, inv.Charges[1].Ext.Get(eracun.ExtKeyTaxCategory))
+	assert.True(t, eracun.ChargeOutsideVAT(inv.Charges[0]))
+	// The VAT totals hold the taxed line alone.
+	assert.Equal(t, "100.00", inv.Totals.Taxes.Category(tax.CategoryVAT).Rates[0].Base.String())
+	assert.Equal(t, "2159.00", inv.Totals.Payable.String())
+}
+
+// TestInformativeChargeIsNotOutsideVAT checks that an informative charge,
+// which adds nothing to the totals, is not taken for an amount left out of
+// the VAT base.
+func TestInformativeChargeIsNotOutsideVAT(t *testing.T) {
+	inv := testInvoice()
+	inv.Charges = []*bill.Charge{{Informative: true, Reason: "Naknada", Amount: num.MakeAmount(100, 2)}}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+	assert.False(t, eracun.ChargeOutsideVAT(inv.Charges[0]))
+	assert.False(t, inv.Charges[0].Ext.Has(eracun.ExtKeyTaxCategory))
 }

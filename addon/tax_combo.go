@@ -32,7 +32,8 @@ var keyTaxCategories = map[cbc.Key]cbc.Code{
 }
 
 // normalizeTaxCombo sets the HR tax category of a VAT combo from its key and
-// rate. A pass-through category is chosen by the user, so it is kept.
+// rate. The category of an amount left out of the VAT base is not a VAT
+// category: it is left as given, for rule 02 to refuse.
 func normalizeTaxCombo(tc *tax.Combo) {
 	if tc == nil || tc.Category != tax.CategoryVAT {
 		return
@@ -71,11 +72,9 @@ func taxComboRules() *rules.Set {
 				),
 			),
 		),
-		rules.When(is.Func("has pass-through category", taxComboIsPassThrough),
-			rules.Field("key",
-				rules.Assert("02", "HR tax categories POVNAK, PP, PPMV and N require the exempt VAT key",
-					is.In(tax.KeyExempt),
-				),
+		rules.Field("ext",
+			rules.Assert("02", "tax combo must not have the HR tax category POVNAK, PP, PPMV or N: an amount left out of the VAT base is a line or charge without taxes, with the category in its own ext",
+				tax.ExtensionsExcludeCodes(ExtKeyTaxCategory, PassThroughTaxLabels...),
 			),
 		),
 		rules.When(is.Func("is consumption tax", taxComboIsConsumptionTax),
@@ -91,9 +90,4 @@ func taxComboRules() *rules.Set {
 func taxComboIsVAT(val any) bool {
 	tc, ok := val.(*tax.Combo)
 	return ok && tc != nil && tc.Category == tax.CategoryVAT
-}
-
-func taxComboIsPassThrough(val any) bool {
-	tc, ok := val.(*tax.Combo)
-	return ok && tc != nil && tc.Ext.Get(ExtKeyTaxCategory).In(PassThroughTaxLabels...)
 }

@@ -127,16 +127,12 @@
 			"i": 1,
 			"reason": "#HR:PPMV#Posebni porez na motorna vozila",
 			"amount": "2000.00",
-			"taxes": [
-				{
-					"cat": "VAT",
-					"key": "exempt",
-					"ext": {
-						"hr-eracun-tax-category": "PPMV",
-						"untdid-tax-category": "E"
-					}
-				}
-			]
+			"ext": {
+				"hr-eracun-tax-category": "PPMV"
+			},
+			"meta": {
+				"hr-eracun-tax-exemption-reason": "Posebni porez na motorna vozila"
+			}
 		}
 	],
 	"payment": {
@@ -181,15 +177,6 @@
 							"base": "10000.00",
 							"percent": "25%",
 							"amount": "2500.00"
-						},
-						{
-							"key": "exempt",
-							"ext": {
-								"hr-eracun-tax-category": "PPMV",
-								"untdid-tax-category": "E"
-							},
-							"base": "2000.00",
-							"amount": "0.00"
 						}
 					],
 					"amount": "2500.00"

@@ -13,7 +13,6 @@ import (
 	goblubl "github.com/invopop/gobl.ubl"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
-	"github.com/invopop/gobl/catalogues/cef"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/num"
 	"github.com/invopop/gobl/org"
@@ -26,8 +25,8 @@ import (
 )
 
 // testInvoice is an invoice written in GOBL, as an issuer sends it: the HR
-// tax categories follow from the tax keys and rates, except for the amount
-// collected for a third party.
+// tax categories follow from the tax keys and rates, and the amount left out
+// of the VAT base is a charge without taxes that names its own.
 func testInvoice() *bill.Invoice {
 	return &bill.Invoice{
 		Regime:    tax.WithRegime("HR"),
@@ -89,13 +88,9 @@ func testInvoice() *bill.Invoice {
 		},
 		Charges: []*bill.Charge{
 			{
-				Reason: "#HR:PP#Porez na potrošnju",
+				Reason: "Porez na potrošnju",
 				Amount: num.MakeAmount(300, 2),
-				Taxes: tax.Set{{
-					Category: tax.CategoryVAT,
-					Key:      tax.KeyExempt,
-					Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
-				}},
+				Ext:    outsideVAT(eracun.TaxLabelPP),
 			},
 		},
 		Discounts: []*bill.Discount{
@@ -159,7 +154,8 @@ func TestExportInvoice(t *testing.T) {
 		inv := env2.Extract().(*bill.Invoice)
 		assert.True(t, inv.HasTags(hr.TagCashBasis))
 		assert.Equal(t, cbc.Code("P99:Narudzba"), inv.Tax.GetExt(eracun.ExtKeyProcess))
-		assert.Equal(t, eracun.TaxLabelPP, inv.Charges[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
+		assert.Empty(t, inv.Charges[0].Taxes, "an amount left out of the VAT base has no VAT combo")
+		assert.Equal(t, eracun.TaxLabelPP, inv.Charges[0].Ext.Get(eracun.ExtKeyTaxCategory))
 		op := eracun.Operator(inv.Supplier.People)
 		require.NotNil(t, op)
 		assert.Equal(t, "Blagajna 1", op.Name.Given)
@@ -236,9 +232,10 @@ func TestImportOperatorEmptyID(t *testing.T) {
 	assert.Contains(t, err.Error(), "GOBL-HR-ERACUN-BILL-INVOICE-06")
 }
 
-// TestImportTaxCategoryNeedsHRPrefix checks that a pass-through tax category
-// is read only from a name with the HR-TB-2 prefix, so that a plain "PPMV"
-// sets no HR tax category.
+// TestImportTaxCategoryNeedsHRPrefix checks that the HR tax category of an
+// amount left out of the VAT base is read only from a name with the HR-TB-2
+// prefix, so that a plain "PPMV" leaves the charge as the exempt one it says
+// it is.
 func TestImportTaxCategoryNeedsHRPrefix(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("testdata", "hr", "Racun za leasing PDV PPMV-aktivacija.xml"))
 	require.NoError(t, err)
@@ -251,13 +248,13 @@ func TestImportTaxCategoryNeedsHRPrefix(t *testing.T) {
 		inv := env.Extract().(*bill.Invoice)
 		var out []cbc.Code
 		for _, l := range inv.Lines {
-			if tc := l.Taxes.Get(tax.CategoryVAT); tc != nil {
-				out = append(out, tc.Ext.Get(eracun.ExtKeyTaxCategory))
+			if eracun.LineOutsideVAT(l) {
+				out = append(out, l.Ext.Get(eracun.ExtKeyTaxCategory))
 			}
 		}
 		for _, c := range inv.Charges {
-			if tc := c.Taxes.Get(tax.CategoryVAT); tc != nil {
-				out = append(out, tc.Ext.Get(eracun.ExtKeyTaxCategory))
+			if eracun.ChargeOutsideVAT(c) {
+				out = append(out, c.Ext.Get(eracun.ExtKeyTaxCategory))
 			}
 		}
 		return out
@@ -269,29 +266,19 @@ func TestImportTaxCategoryNeedsHRPrefix(t *testing.T) {
 	assert.NotContains(t, labels([]byte(plain)), eracun.TaxLabelPPMV)
 }
 
-// TestMergedExemptionKeepsVATEX checks that joining the exempt entries of a
-// pass-through amount and an exempt supply keeps the VATEX code of either.
-func TestMergedExemptionKeepsVATEX(t *testing.T) {
+// TestExemptSupplyGivesTheBreakdownReason checks the one exempt entry EN
+// 16931 allows in the VAT breakdown (BR-E-01) on an invoice with an exempt
+// supply and an amount left out of the VAT base: it has both amounts, and the
+// exempt supply's ground. The HR breakdown keeps them apart.
+func TestExemptSupplyGivesTheBreakdownReason(t *testing.T) {
 	inv := testInvoice()
 	inv.Charges = nil
-	inv.Lines[0].Taxes = tax.Set{{
-		Category: tax.CategoryVAT,
-		Key:      tax.KeyExempt,
-		Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP}),
-	}}
-	inv.Lines[1].Taxes = tax.Set{{
-		Category: tax.CategoryVAT,
-		Key:      tax.KeyExempt,
-		Ext:      tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: "VATEX-EU-132"}),
-	}}
-	env, err := gobl.Envelop(inv)
-	require.NoError(t, err)
-	require.NoError(t, env.Calculate())
-	require.NoError(t, env.Validate())
-
-	out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
-	require.NoError(t, err)
-	doc := out.(*goblubl.Invoice)
+	inv.Tax.Notes = nil
+	inv.Lines[0].Taxes = nil
+	inv.Lines[0].Ext = outsideVAT(eracun.TaxLabelPOVNAK)
+	inv.Lines[1].Taxes = tax.Set{vatex(tax.KeyExempt, "VATEX-EU-132")}
+	inv.Discounts = nil
+	doc := exportTestInvoice(t, inv)
 	var exempt []goblubl.TaxSubtotal
 	for _, st := range doc.TaxTotal[0].TaxSubtotal {
 		if st.TaxCategory.ID.Value == "E" {
@@ -302,6 +289,17 @@ func TestMergedExemptionKeepsVATEX(t *testing.T) {
 	assert.Equal(t, "120.00", exempt[0].TaxableAmount.Value)
 	require.NotNil(t, exempt[0].TaxCategory.TaxExemptionReasonCode)
 	assert.Equal(t, "VATEX-EU-132", *exempt[0].TaxCategory.TaxExemptionReasonCode)
+
+	hrd, err := hrubl.FindHRFISK20Data(doc)
+	require.NoError(t, err)
+	require.NotNil(t, hrd)
+	var rows []string
+	for _, r := range hrd.HRTaxTotal.HRTaxSubtotals {
+		rows = append(rows, r.HRTaxCategory.ID+" "+r.HRTaxCategory.Name+" "+r.HRTaxCategory.HRTaxScheme.ID+" "+r.TaxableAmount.Value)
+	}
+	assert.ElementsMatch(t, []string{"E HR:E VAT 20.00", "O HR:POVNAK OTH 100.00"}, rows)
+	assert.Equal(t, "100.00", hrd.HRLegalMonetaryTotal.OutOfScopeOfVATAmount.Value)
+	assert.Equal(t, "20.00", hrd.HRLegalMonetaryTotal.TaxExclusiveAmount.Value)
 }
 
 func exportTestInvoice(t *testing.T, inv *bill.Invoice) *goblubl.Invoice {
@@ -431,8 +429,9 @@ func TestSellerContactPoint(t *testing.T) {
 }
 
 // TestChargeExemptionReason checks that the exemption reason of a document
-// level charge or allowance (HR-BT-7) is kept when the VAT note doesn't give
-// it back, and only then.
+// level charge or allowance (HR-BT-7) is kept when the export wouldn't give
+// it back, and only then. A charge left out of the VAT base gets its own
+// reason (BT-104) as its exemption reason.
 func TestChargeExemptionReason(t *testing.T) {
 	importExample := func(t *testing.T, edit func(string) string) *bill.Invoice {
 		t.Helper()
@@ -444,16 +443,20 @@ func TestChargeExemptionReason(t *testing.T) {
 		require.NoError(t, err)
 		return env.Extract().(*bill.Invoice)
 	}
-	t.Run("same as the label's", func(t *testing.T) {
+	t.Run("differs from the charge's reason", func(t *testing.T) {
+		// The official example: "#HR:PP#Porez na potrošnju" as the charge's
+		// reason, "Porez na potrošnju" as its exemption reason.
 		inv := importExample(t, func(s string) string { return s })
-		assert.Empty(t, inv.Charges[0].Meta)
+		assert.Equal(t, "Porez na potrošnju", inv.Charges[0].Meta[hrubl.MetaKeyTaxExemptionReason])
+		doc := exportTestInvoice(t, inv)
+		assert.Equal(t, "#HR:PP#Porez na potrošnju", *doc.AllowanceCharge[0].AllowanceChargeReason)
+		assert.Equal(t, "Porez na potrošnju", *doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
 	})
-	t.Run("differs from the label's", func(t *testing.T) {
+	t.Run("same as the charge's reason", func(t *testing.T) {
 		inv := importExample(t, func(s string) string {
-			return strings.Replace(s, "<cbc:TaxExemptionReason>Porez na potrošnju<", "<cbc:TaxExemptionReason>#HR:PP#Porez na potrošnju<", 1)
+			return strings.Replace(s, "<cbc:AllowanceChargeReason>#HR:PP#Porez na potrošnju<", "<cbc:AllowanceChargeReason>Porez na potrošnju<", 1)
 		})
-		assert.Equal(t, "#HR:PP#Porez na potrošnju", inv.Charges[0].Meta[hrubl.MetaKeyTaxExemptionReason],
-			"a pass-through charge doesn't take the VAT note, even with the same text")
+		assert.Empty(t, inv.Charges[0].Meta)
 	})
 	t.Run("discount", func(t *testing.T) {
 		inv := testInvoice()
@@ -503,42 +506,50 @@ func TestLineExemptionReason(t *testing.T) {
 	assert.Equal(t, "#HR:POVNAK#Povratna naknada", *out.(*goblubl.Invoice).TaxTotal[0].TaxSubtotal[1].TaxCategory.TaxExemptionReason)
 }
 
-// TestPassThroughExemptionReason checks that an amount left out of the VAT
-// base is given the reason of its HR-TB-2 label, so that it doesn't share the
-// VAT note with an exempt supply on the same invoice, and the exempt supply
-// keeps the note's text.
-func TestPassThroughExemptionReason(t *testing.T) {
+// TestAmountsOutsideVATReasons checks the reasons of the amounts left out of
+// the VAT base beside an exempt supply: each has the pass-through VATEX code,
+// a charge has its own reason as the text, and the exempt supply keeps the
+// text of the VAT note, which is also the breakdown's.
+func TestAmountsOutsideVATReasons(t *testing.T) {
 	inv := testInvoice()
-	inv.Lines = append(inv.Lines, &bill.Line{
-		Quantity: num.MakeAmount(4, 0),
-		Item: &org.Item{
-			Name:       "Povratna naknada",
-			Price:      num.NewAmount(7, 2),
-			Identities: []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "62.20.20"}},
-		},
-		Taxes: tax.Set{{
-			Category: tax.CategoryVAT,
-			Key:      tax.KeyExempt,
-			Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPOVNAK}),
-		}},
-	})
+	l := lineOutsideVAT("Povratna naknada", 7, eracun.TaxLabelPOVNAK)
+	l.Quantity = num.MakeAmount(4, 0)
+	inv.Lines = append(inv.Lines, l)
 	doc := exportTestInvoice(t, inv)
 	require.Len(t, doc.InvoiceLines, 3)
-	reason := func(s *string) string {
-		t.Helper()
-		require.NotNil(t, s)
-		return *s
-	}
-	assert.Equal(t, "Oslobođeno PDV-a", reason(doc.InvoiceLines[1].Item.ClassifiedTaxCategory.TaxExemptionReason), "exempt service")
-	assert.Equal(t, "Povratna naknada", reason(doc.InvoiceLines[2].Item.ClassifiedTaxCategory.TaxExemptionReason), "return fee")
+	exempt := doc.InvoiceLines[1].Item.ClassifiedTaxCategory
+	require.NotNil(t, exempt.TaxExemptionReason)
+	assert.Equal(t, "Oslobođeno PDV-a", *exempt.TaxExemptionReason, "exempt service")
+	assert.Nil(t, exempt.TaxExemptionReasonCode)
+
+	deposit := doc.InvoiceLines[2].Item.ClassifiedTaxCategory
+	require.NotNil(t, deposit)
+	assert.Equal(t, "E", deposit.ID.Value)
+	assert.Equal(t, "HR:POVNAK", *deposit.Name)
+	assert.Equal(t, "VATEX-EU-79-C", *deposit.TaxExemptionReasonCode)
+	assert.Nil(t, deposit.TaxExemptionReason, "a line left out of the VAT base has no reason text of its own")
+
 	require.NotEmpty(t, doc.AllowanceCharge)
-	assert.Equal(t, "Porez na potrošnju", reason(doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason), "consumption tax")
+	pp := doc.AllowanceCharge[0].TaxCategory[0]
+	assert.Equal(t, "VATEX-EU-79-C", *pp.TaxExemptionReasonCode)
+	assert.Equal(t, "Porez na potrošnju", *pp.TaxExemptionReason, "the charge's reason")
+
+	var exemptRows []goblubl.TaxSubtotal
+	for _, st := range doc.TaxTotal[0].TaxSubtotal {
+		if st.TaxCategory.ID.Value == "E" {
+			exemptRows = append(exemptRows, st)
+		}
+	}
+	require.Len(t, exemptRows, 1)
+	assert.Equal(t, "23.28", exemptRows[0].TaxableAmount.Value)
+	assert.Equal(t, "Oslobođeno PDV-a", *exemptRows[0].TaxCategory.TaxExemptionReason)
 }
 
 // TestKeptExemptionReasonNeedsExemptCategory checks that a kept exemption
 // reason is not written for a category without exemption reasons.
 func TestKeptExemptionReasonNeedsExemptCategory(t *testing.T) {
 	inv := testInvoice()
+	inv.Charges[0].Ext = tax.Extensions{}
 	inv.Charges[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}
 	inv.Charges[0].Meta = cbc.Meta{hrubl.MetaKeyTaxExemptionReason: "Porez na potrošnju"}
 	doc := exportTestInvoice(t, inv)

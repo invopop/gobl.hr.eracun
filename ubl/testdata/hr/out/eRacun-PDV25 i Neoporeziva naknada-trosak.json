@@ -127,16 +127,9 @@
 			"i": 1,
 			"reason": "#HR:N#Turistička pristojba",
 			"amount": "10.00",
-			"taxes": [
-				{
-					"cat": "VAT",
-					"key": "exempt",
-					"ext": {
-						"hr-eracun-tax-category": "N",
-						"untdid-tax-category": "E"
-					}
-				}
-			],
+			"ext": {
+				"hr-eracun-tax-category": "N"
+			},
 			"meta": {
 				"hr-eracun-tax-exemption-reason": "Turistička pristojba"
 			}
@@ -187,15 +180,6 @@
 							"base": "100.00",
 							"percent": "25%",
 							"amount": "25.00"
-						},
-						{
-							"key": "exempt",
-							"ext": {
-								"hr-eracun-tax-category": "N",
-								"untdid-tax-category": "E"
-							},
-							"base": "10.00",
-							"amount": "0.00"
 						}
 					],
 					"amount": "25.00"

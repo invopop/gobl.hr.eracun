@@ -79,21 +79,23 @@ func exportConsumptionTax(inv *bill.Invoice, out *goblubl.Invoice) error {
 			Amount:                  goblubl.NewAmount(r.Amount, ccy),
 			BaseAmount:              &base,
 			TaxCategory: []*goblubl.TaxCategory{{
-				ID:                 &goblubl.IDType{Value: en16931.TaxCategoryExempt.String()},
-				Name:               ptr(consumptionTaxName),
-				Percent:            ptr("0"),
-				TaxExemptionReason: ptr(reason),
-				TaxScheme:          &goblubl.TaxScheme{ID: goblubl.IDType{Value: goblubl.TaxSchemeVAT}},
+				ID:                     &goblubl.IDType{Value: en16931.TaxCategoryExempt.String()},
+				Name:                   ptr(consumptionTaxName),
+				Percent:                ptr("0"),
+				TaxExemptionReasonCode: ptr(vatexOutsideVAT),
+				TaxExemptionReason:     ptr(reason),
+				TaxScheme:              &goblubl.TaxScheme{ID: goblubl.IDType{Value: goblubl.TaxSchemeVAT}},
 			}},
 		})
 		tt.TaxSubtotal = append(tt.TaxSubtotal, goblubl.TaxSubtotal{
 			TaxableAmount: goblubl.NewAmount(r.Amount, ccy),
 			TaxAmount:     goblubl.NewAmount(num.AmountZero, ccy),
 			TaxCategory: goblubl.TaxCategory{
-				ID:                 &goblubl.IDType{Value: en16931.TaxCategoryExempt.String()},
-				Percent:            ptr("0"),
-				TaxExemptionReason: ptr("#" + consumptionTaxName + "#" + reason),
-				TaxScheme:          &goblubl.TaxScheme{ID: goblubl.IDType{Value: goblubl.TaxSchemeVAT}},
+				ID:                     &goblubl.IDType{Value: en16931.TaxCategoryExempt.String()},
+				Percent:                ptr("0"),
+				TaxExemptionReasonCode: ptr(vatexOutsideVAT),
+				TaxExemptionReason:     ptr("#" + consumptionTaxName + "#" + reason),
+				TaxScheme:              &goblubl.TaxScheme{ID: goblubl.IDType{Value: goblubl.TaxSchemeVAT}},
 			},
 		})
 		sum = sum.Add(r.Amount)

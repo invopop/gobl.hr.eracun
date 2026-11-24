@@ -20,15 +20,6 @@ import (
 // taxCategoryPrefix starts every HR tax category name (HR-TB-2).
 const taxCategoryPrefix = "HR:"
 
-// passThroughTaxSchemes are the tax schemes of the amounts left out of the
-// VAT base that belong to another tax, as the HR extension breaks them down.
-// The others, such as a non-taxable fee (N), keep VAT.
-var passThroughTaxSchemes = map[cbc.Code]string{
-	eracun.TaxLabelPP:     "LOC",
-	eracun.TaxLabelPOVNAK: "OTH",
-	eracun.TaxLabelPPMV:   "CAR",
-}
-
 // exportHR applies the HR CIUS rules to an exported invoice.
 func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error {
 	inv, out, ok := invoices(env, doc)
@@ -57,6 +48,9 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 	if err := exportConsumptionTax(inv, out); err != nil {
 		return err
 	}
+	if err := exportAmountsOutsideVAT(inv, out); err != nil {
+		return err
+	}
 	if err := mergeTaxSubtotals(out); err != nil {
 		return err
 	}
@@ -64,10 +58,11 @@ func exportHR(_ *goblubl.Format, env *gobl.Envelope, doc goblubl.Document) error
 }
 
 // mergeTaxSubtotals joins the VAT breakdown entries of the same category and
-// rate. GOBL keeps a separate rate total for each HR tax category, so an
-// exempt supply and an amount left out of the VAT base would otherwise be
-// two exempt entries, where EN 16931 allows one (BR-E-01). The first
-// exemption reason and code found are kept.
+// rate. GOBL keeps a rate total for each set of extensions, so two exempt
+// supplies with different VATEX codes are two exempt entries, and the amounts
+// left out of the VAT base add another, where EN 16931 allows one (BR-E-01).
+// The first exemption reason and code found are kept: those of an exempt
+// supply, which come before those of the amounts left out of the VAT base.
 func mergeTaxSubtotals(out *goblubl.Invoice) error {
 	for i := range out.TaxTotal {
 		var merged []goblubl.TaxSubtotal
@@ -309,8 +304,8 @@ func keptExemptionReason(meta cbc.Meta, ext tax.Extensions) (string, bool) {
 // note gobl.ubl writes, which differs only for an amount left out of the VAT
 // base, and writes back an exemption reason of its own (HR-BT-7).
 func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
-	documentCharges(out, inv, func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta) {
-		tc := ts.Get(tax.CategoryVAT)
+	documentCharges(out, inv, func(ac *goblubl.AllowanceCharge, c documentCharge) {
+		tc := c.taxes.Get(tax.CategoryVAT)
 		if tc == nil {
 			return
 		}
@@ -322,7 +317,7 @@ func exportChargeTaxCategories(inv *bill.Invoice, out *goblubl.Invoice) {
 			if r, ok := exemptionReason(inv, tc.Ext); ok {
 				cat.TaxExemptionReason = &r
 			}
-			if reason, ok := keptExemptionReason(*meta, tc.Ext); ok {
+			if reason, ok := keptExemptionReason(*c.meta, tc.Ext); ok {
 				cat.TaxExemptionReason = &reason
 			}
 		}
@@ -340,16 +335,18 @@ func taxCategoryName(ext tax.Extensions) *string {
 
 // exportHRFISK20Data adds the HR extension data: the cash basis VAT flag,
 // and the HR VAT breakdown and totals when the invoice has exempt amounts
-// (HR-BR-26), which is how amounts left out of the VAT base are carried. The
-// consumption tax is one, as its charges are exempt.
+// (HR-BR-26). The amounts left out of the VAT base and the consumption tax
+// are among them, as the core states both as exempt.
 func exportHRFISK20Data(inv *bill.Invoice, out *goblubl.Invoice) error {
 	data := new(HRFISK20Data)
 	if inv.HasTags(hr.TagCashBasis) {
 		data.HRObracunPDVPoNaplati = cashBasisText
 	}
+	vat := vatTotal(inv)
 	pp := consumptionTaxTotal(inv)
-	if vat := vatTotal(inv); vat != nil && (hasExemptRate(vat) || pp != nil) {
-		data.HRTaxTotal, data.HRLegalMonetaryTotal = hrTotals(inv, vat, pp)
+	outside := amountsOutsideVAT(inv)
+	if hasExemptRate(vat) || pp != nil || len(outside) > 0 {
+		data.HRTaxTotal, data.HRLegalMonetaryTotal = hrTotals(inv, vat, pp, outside)
 	}
 	if data.HRObracunPDVPoNaplati == "" && data.HRTaxTotal == nil {
 		return nil
@@ -368,54 +365,63 @@ func vatTotal(inv *bill.Invoice) *tax.CategoryTotal {
 // hasOutsideScopeRate says whether the VAT totals have an amount not subject
 // to VAT (O).
 func hasOutsideScopeRate(vat *tax.CategoryTotal) bool {
+	return hasRateCategory(vat, en16931.TaxCategoryOutsideScope)
+}
+
+func hasExemptRate(vat *tax.CategoryTotal) bool {
+	return hasRateCategory(vat, en16931.TaxCategoryExempt)
+}
+
+func hasRateCategory(vat *tax.CategoryTotal, category cbc.Code) bool {
 	if vat == nil {
 		return false
 	}
 	for _, r := range vat.Rates {
-		if r.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryOutsideScope {
+		if r.Ext.Get(untdid.ExtKeyTaxCategory) == category {
 			return true
 		}
 	}
 	return false
 }
 
-func hasExemptRate(vat *tax.CategoryTotal) bool {
-	for _, r := range vat.Rates {
-		if r.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryExempt {
-			return true
-		}
-	}
-	return false
-}
-
-// hrTotals breaks the VAT totals down by HR tax category. Amounts left out
-// of the VAT base move to category O (HR-BR-29, HR-BR-32), and so does any
-// other O amount. The consumption tax follows the VAT rates, as in the
-// official example: one O entry under its LOC scheme for all its rates, the
-// way the other HR categories get one entry each.
-func hrTotals(inv *bill.Invoice, vat, pp *tax.CategoryTotal) (*HRTaxTotal, *HRLegalMonetaryTotal) {
+// hrTotals breaks the totals down by HR tax category: an entry for each VAT
+// rate total, then an entry out of the VAT scope (O) for each HR tax category
+// of the amounts left out of the VAT base, under its own scheme (HR-BR-29,
+// HR-BR-32). The consumption tax follows, as in the official example: one O
+// entry under its LOC scheme for all its rates.
+func hrTotals(inv *bill.Invoice, vat, pp *tax.CategoryTotal, outside []outsideVATAmount) (*HRTaxTotal, *HRLegalMonetaryTotal) {
 	ccy := inv.Currency
 	amount := func(a num.Amount) goblubl.Amount {
 		id := ccy.String()
 		return goblubl.Amount{CurrencyID: &id, Value: ccy.Def().Rescale(a).String()}
 	}
+	outsideEntry := func(label cbc.Code, a num.Amount) HRTaxSubtotal {
+		scheme, ok := outsideVATTaxSchemes[label]
+		if !ok {
+			scheme = goblubl.TaxSchemeVAT
+		}
+		return HRTaxSubtotal{
+			TaxableAmount: amount(a),
+			TaxAmount:     amount(num.AmountZero),
+			HRTaxCategory: HRTaxCategory{
+				ID:          en16931.TaxCategoryOutsideScope.String(),
+				Name:        taxCategoryPrefix + label.String(),
+				Percent:     "0",
+				HRTaxScheme: HRTaxScheme{ID: scheme},
+			},
+		}
+	}
 	taxAmount := ccy.Def().Zero()
 	outOfScope := ccy.Def().Zero()
 	tt := new(HRTaxTotal)
-	for _, r := range vat.Rates {
-		label := r.Ext.Get(eracun.ExtKeyTaxCategory)
-		cat := HRTaxCategory{
-			ID:          r.Ext.Get(untdid.ExtKeyTaxCategory).String(),
-			Name:        taxCategoryPrefix + label.String(),
-			Percent:     "0",
-			HRTaxScheme: HRTaxScheme{ID: goblubl.TaxSchemeVAT},
-		}
-		if label.In(eracun.PassThroughTaxLabels...) {
-			cat.ID = en16931.TaxCategoryOutsideScope.String()
-			if scheme, ok := passThroughTaxSchemes[label]; ok {
-				cat.HRTaxScheme.ID = scheme
+	if vat != nil {
+		for _, r := range vat.Rates {
+			cat := HRTaxCategory{
+				ID:          r.Ext.Get(untdid.ExtKeyTaxCategory).String(),
+				Name:        taxCategoryPrefix + r.Ext.Get(eracun.ExtKeyTaxCategory).String(),
+				Percent:     "0",
+				HRTaxScheme: HRTaxScheme{ID: goblubl.TaxSchemeVAT},
 			}
-		} else {
 			if r.Percent != nil {
 				cat.Percent = r.Percent.StringWithoutSymbol()
 			}
@@ -424,16 +430,20 @@ func hrTotals(inv *bill.Invoice, vat, pp *tax.CategoryTotal) (*HRTaxTotal, *HRLe
 					cat.TaxExemptionReason = n.Text
 				}
 			}
+			if cat.ID == en16931.TaxCategoryOutsideScope.String() {
+				outOfScope = outOfScope.Add(r.Base)
+			}
+			taxAmount = taxAmount.Add(r.Amount)
+			tt.HRTaxSubtotals = append(tt.HRTaxSubtotals, HRTaxSubtotal{
+				TaxableAmount: amount(r.Base),
+				TaxAmount:     amount(r.Amount),
+				HRTaxCategory: cat,
+			})
 		}
-		if cat.ID == en16931.TaxCategoryOutsideScope.String() {
-			outOfScope = outOfScope.Add(r.Base)
-		}
-		taxAmount = taxAmount.Add(r.Amount)
-		tt.HRTaxSubtotals = append(tt.HRTaxSubtotals, HRTaxSubtotal{
-			TaxableAmount: amount(r.Base),
-			TaxAmount:     amount(r.Amount),
-			HRTaxCategory: cat,
-		})
+	}
+	for _, a := range outside {
+		tt.HRTaxSubtotals = append(tt.HRTaxSubtotals, outsideEntry(a.label, a.amount))
+		outOfScope = outOfScope.Add(a.amount)
 	}
 	// The tax exclusive amount as written (BT-109), with the PP charges.
 	total := inv.Totals.Total
@@ -442,16 +452,7 @@ func hrTotals(inv *bill.Invoice, vat, pp *tax.CategoryTotal) (*HRTaxTotal, *HRLe
 		for _, r := range pp.Rates {
 			ppAmount = ppAmount.Add(r.Amount)
 		}
-		tt.HRTaxSubtotals = append(tt.HRTaxSubtotals, HRTaxSubtotal{
-			TaxableAmount: amount(ppAmount),
-			TaxAmount:     amount(num.AmountZero),
-			HRTaxCategory: HRTaxCategory{
-				ID:          en16931.TaxCategoryOutsideScope.String(),
-				Name:        consumptionTaxName,
-				Percent:     "0",
-				HRTaxScheme: HRTaxScheme{ID: passThroughTaxSchemes[eracun.TaxLabelPP]},
-			},
-		})
+		tt.HRTaxSubtotals = append(tt.HRTaxSubtotals, outsideEntry(eracun.TaxLabelPP, ppAmount))
 		outOfScope = outOfScope.Add(ppAmount)
 		total = total.Add(ppAmount)
 	}

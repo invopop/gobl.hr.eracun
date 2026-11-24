@@ -1,0 +1,203 @@
+{
+	"$schema": "https://gobl.org/draft-0/envelope",
+	"head": {
+		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
+		"dig": {
+			"alg": "sha256",
+			"val": "d3d563fdfa00d217de36ffb1c17244c638d352b57b6677147497bd36ea7ae838"
+		},
+		"from": "iso6523-actorid-upis::9934:12345678903",
+		"to": "iso6523-actorid-upis::9934:11111111119"
+	},
+	"doc": {
+		"$schema": "https://gobl.org/draft-0/bill/invoice",
+		"$regime": "HR",
+		"$addons": [
+			"eu-en16931-v2017",
+			"hr-eracun-v1"
+		],
+		"uuid": "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a5",
+		"type": "standard",
+		"code": "4-P1-1",
+		"issue_date": "2026-12-01",
+		"issue_time": "12:00:00",
+		"currency": "EUR",
+		"tax": {
+			"rounding": "currency",
+			"ext": {
+				"hr-eracun-process": "P1",
+				"untdid-document-type": "380"
+			}
+		},
+		"supplier": {
+			"name": "TVRTKA A d.o.o.",
+			"tax_id": {
+				"country": "HR",
+				"code": "12345678903"
+			},
+			"people": [
+				{
+					"key": "operator",
+					"name": {
+						"given": "Ivan",
+						"surname": "Horvat"
+					},
+					"identities": [
+						{
+							"type": "OIB",
+							"code": "22222222226"
+						}
+					]
+				}
+			],
+			"endpoints": [
+				{
+					"uri": "iso6523-actorid-upis::9934:12345678903"
+				}
+			],
+			"addresses": [
+				{
+					"street": "Ulica 1",
+					"locality": "Zagreb",
+					"code": "10000",
+					"country": "HR"
+				}
+			],
+			"ext": {
+				"hr-eracun-vat-status": "registered"
+			}
+		},
+		"customer": {
+			"name": "Tvrtka B d.o.o.",
+			"tax_id": {
+				"country": "HR",
+				"code": "11111111119"
+			},
+			"endpoints": [
+				{
+					"uri": "iso6523-actorid-upis::9934:11111111119"
+				}
+			],
+			"addresses": [
+				{
+					"street": "Ulica 2",
+					"locality": "Rijeka",
+					"code": "51000",
+					"country": "HR"
+				}
+			]
+		},
+		"lines": [
+			{
+				"i": 1,
+				"quantity": "240",
+				"item": {
+					"name": "Mineralna voda 0,5 l",
+					"identities": [
+						{
+							"label": "CG",
+							"code": "11.07.11"
+						}
+					],
+					"price": "0.50",
+					"unit": "piece"
+				},
+				"sum": "120.00",
+				"taxes": [
+					{
+						"cat": "VAT",
+						"key": "standard",
+						"rate": "general",
+						"percent": "25.0%",
+						"ext": {
+							"hr-eracun-tax-category": "PDV25",
+							"untdid-tax-category": "S"
+						}
+					}
+				],
+				"total": "120.00"
+			},
+			{
+				"i": 2,
+				"quantity": "240",
+				"item": {
+					"name": "Povratna naknada",
+					"identities": [
+						{
+							"label": "CG",
+							"code": "22.22.19"
+						}
+					],
+					"price": "0.10",
+					"unit": "piece"
+				},
+				"sum": "24.00",
+				"total": "24.00",
+				"ext": {
+					"hr-eracun-tax-category": "POVNAK"
+				}
+			}
+		],
+		"charges": [
+			{
+				"i": 1,
+				"reason": "Naknada za dostavu paleta",
+				"amount": "15.00",
+				"ext": {
+					"hr-eracun-tax-category": "N"
+				}
+			}
+		],
+		"payment": {
+			"terms": {
+				"due_dates": [
+					{
+						"date": "2026-12-31",
+						"amount": "189.00",
+						"percent": "100%"
+					}
+				]
+			},
+			"instructions": {
+				"key": "credit-transfer",
+				"credit_transfer": [
+					{
+						"iban": "HR1210010051863000160"
+					}
+				],
+				"ext": {
+					"untdid-payment-means": "30"
+				}
+			}
+		},
+		"totals": {
+			"sum": "144.00",
+			"charge": "15.00",
+			"total": "159.00",
+			"taxes": {
+				"categories": [
+					{
+						"code": "VAT",
+						"rates": [
+							{
+								"key": "standard",
+								"ext": {
+									"hr-eracun-tax-category": "PDV25",
+									"untdid-tax-category": "S"
+								},
+								"base": "120.00",
+								"percent": "25.0%",
+								"amount": "30.00"
+							}
+						],
+						"amount": "30.00"
+					}
+				],
+				"sum": "30.00"
+			},
+			"tax": "30.00",
+			"total_with_tax": "189.00",
+			"payable": "189.00"
+		}
+	}
+}

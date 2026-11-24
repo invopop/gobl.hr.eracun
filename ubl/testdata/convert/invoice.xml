@@ -120,12 +120,13 @@
   </cac:AccountingCustomerParty>
   <cac:AllowanceCharge>
     <cbc:ChargeIndicator>true</cbc:ChargeIndicator>
-    <cbc:AllowanceChargeReason>#HR:PP#Porez na potrošnju</cbc:AllowanceChargeReason>
+    <cbc:AllowanceChargeReason>Porez na potrošnju</cbc:AllowanceChargeReason>
     <cbc:Amount currencyID="EUR">3.00</cbc:Amount>
     <cac:TaxCategory>
       <cbc:ID>E</cbc:ID>
       <cbc:Name>HR:PP</cbc:Name>
       <cbc:Percent>0</cbc:Percent>
+      <cbc:TaxExemptionReasonCode>VATEX-EU-79-C</cbc:TaxExemptionReasonCode>
       <cbc:TaxExemptionReason>Porez na potrošnju</cbc:TaxExemptionReason>
       <cac:TaxScheme>
         <cbc:ID>VAT</cbc:ID>
@@ -164,6 +165,7 @@
       <cac:TaxCategory>
         <cbc:ID>E</cbc:ID>
         <cbc:Percent>0</cbc:Percent>
+        <cbc:TaxExemptionReasonCode>VATEX-EU-79-C</cbc:TaxExemptionReasonCode>
         <cbc:TaxExemptionReason>Oslobođeno PDV-a</cbc:TaxExemptionReason>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>

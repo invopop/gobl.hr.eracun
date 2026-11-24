@@ -142,17 +142,10 @@
 				}
 			},
 			"sum": "5.00",
-			"taxes": [
-				{
-					"cat": "VAT",
-					"key": "exempt",
-					"ext": {
-						"hr-eracun-tax-category": "POVNAK",
-						"untdid-tax-category": "E"
-					}
-				}
-			],
-			"total": "5.00"
+			"total": "5.00",
+			"ext": {
+				"hr-eracun-tax-category": "POVNAK"
+			}
 		}
 	],
 	"payment": {
@@ -199,15 +192,6 @@
 							"base": "100.00",
 							"percent": "25%",
 							"amount": "25.00"
-						},
-						{
-							"key": "exempt",
-							"ext": {
-								"hr-eracun-tax-category": "POVNAK",
-								"untdid-tax-category": "E"
-							},
-							"base": "5.00",
-							"amount": "0.00"
 						}
 					],
 					"amount": "25.00"

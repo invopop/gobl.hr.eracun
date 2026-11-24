@@ -58,7 +58,7 @@ func TestConsumptionTaxAsOfficialExample(t *testing.T) {
 
 	inv := env.Extract().(*bill.Invoice)
 	require.Len(t, inv.Charges, 1)
-	require.Equal(t, eracun.TaxLabelPP, inv.Charges[0].Taxes.Get(tax.CategoryVAT).Ext.Get(eracun.ExtKeyTaxCategory))
+	require.Equal(t, eracun.TaxLabelPP, inv.Charges[0].Ext.Get(eracun.ExtKeyTaxCategory))
 	inv.Charges = nil
 	inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
 	// The import reads the PP charge's exemption reason as the exempt note,
@@ -256,7 +256,8 @@ func TestConsumptionTaxImportsAsCharge(t *testing.T) {
 	inv := env.Extract().(*bill.Invoice)
 	require.Len(t, inv.Charges, 2)
 	for _, c := range inv.Charges {
-		assert.Equal(t, eracun.TaxLabelPP, c.Taxes.Get(tax.CategoryVAT).Ext.Get(eracun.ExtKeyTaxCategory))
+		assert.Empty(t, c.Taxes)
+		assert.Equal(t, eracun.TaxLabelPP, c.Ext.Get(eracun.ExtKeyTaxCategory))
 	}
 	assert.Empty(t, inv.Lines[0].Item.Attributes)
 	assert.Equal(t, "51.58", inv.Totals.Payable.String())

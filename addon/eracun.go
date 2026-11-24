@@ -98,6 +98,15 @@ func newAddon() *tax.AddonDef {
 				requires: an invoice with no rounding rule is given the currency
 				rule, and one that sets another rule is refused.
 
+				An amount left out of the VAT base, such as the return fee on
+				packaging (POVNAK), the special tax on motor vehicles (PPMV) or
+				another fee that is not taxed (N), has no VAT combo: it is a line of
+				its own or a document level charge without taxes, with its HR tax
+				category in its own extensions. A line must name it; a charge
+				without one is taken as N and needs a reason. The UBL export writes
+				such an amount as the HR CIUS does, exempt in the core and outside
+				the VAT base in the HR breakdown.
+
 				The consumption tax on drinks in catering is the hr regime's PP tax,
 				charged on each line beside its VAT at up to 3%. The UBL export writes
 				it as the HR CIUS carries it: an exempt document level charge per

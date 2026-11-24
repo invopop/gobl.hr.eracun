@@ -129,16 +129,12 @@
 			"base": "100.00",
 			"percent": "3%",
 			"amount": "3.00",
-			"taxes": [
-				{
-					"cat": "VAT",
-					"key": "exempt",
-					"ext": {
-						"hr-eracun-tax-category": "PP",
-						"untdid-tax-category": "E"
-					}
-				}
-			]
+			"ext": {
+				"hr-eracun-tax-category": "PP"
+			},
+			"meta": {
+				"hr-eracun-tax-exemption-reason": "Porez na potrošnju"
+			}
 		}
 	],
 	"payment": {
@@ -186,15 +182,6 @@
 							"base": "100.00",
 							"percent": "25%",
 							"amount": "25.00"
-						},
-						{
-							"key": "exempt",
-							"ext": {
-								"hr-eracun-tax-category": "PP",
-								"untdid-tax-category": "E"
-							},
-							"base": "3.00",
-							"amount": "0.00"
 						}
 					],
 					"amount": "25.00"

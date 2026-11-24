@@ -71,7 +71,7 @@ from gobl.ubl, or `convert.Import`/`convert.Export`.
 | Key | Description |
 | --- | --- |
 | `hr-eracun-process` | Business process (BT-23), written to the UBL `ProfileID`: `P1` to `P12`, or `P99:` followed by a label agreed with the buyer. |
-| `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`) and any other non-taxable fee charged with taxable items (`N`), which are set on an exempt combo. An issuer charges the consumption tax with the regime's `PP` tax instead (see [Consumption tax (PP)](#consumption-tax-pp)); the label `PP` is how a received eRačun carries it. |
+| `hr-eracun-tax-category` | HR tax category (HR-TB-2). On a VAT combo, one of `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E` or `O`, set from the tax key and rate. On a line or charge without taxes, the category of an amount left out of the VAT base: `POVNAK`, `PPMV`, `N` or, on a received eRačun, `PP` (see [Amounts left out of the VAT base](#amounts-left-out-of-the-vat-base)). |
 | `hr-eracun-vat-status` | Whether the supplier is registered for VAT: `registered` or `not-registered`. Required on the supplier of every invoice (see [Supplier](#supplier)). |
 | `hr-eracun-rejection-reason` | Kind of reason for rejecting an invoice (AR-BT-12): `N`, `U` or `O`, the same code the buyer reports to the Tax Administration. |
 
@@ -79,22 +79,90 @@ The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
 invoice is paid. The regime adds the legal VAT note, and the UBL export writes
 `HRObracunPDVPoNaplati`.
 
+## Amounts left out of the VAT base
+
+Some amounts on an invoice are not the price of a supply and carry no VAT:
+the return fee on drink packaging (`POVNAK`), the special tax on motor
+vehicles (`PPMV`), or any other fee that is not taxed (`N`), such as a tourist
+tax. The HR CIUS calls them pass-through items (Art. 33(3) of the VAT Act).
+
+Write one with no `taxes`, and its HR tax category in its own extensions:
+
+- as a **line of its own** when it has a quantity and a unit price. The line
+  must name its category, and needs a KPD code like any other line;
+- as a **document level charge** when it is one amount. The charge's `reason`
+  is the name of the fee or tax, and a charge with no category is taken as
+  `N`.
+
+```yaml
+lines:
+  - quantity: 240
+    item:
+      name: "Povratna naknada"
+      price: "0.10"
+      identities:
+        - label: CG
+          code: "22.22.19"
+    ext:
+      hr-eracun-tax-category: "POVNAK"
+charges:
+  - reason: "Turistička pristojba"
+    amount: "10.00"
+```
+
+Never write it as a charge on a line: a line charge is part of the line's
+amount and takes the line's VAT. Nor as a VAT combo: a tax combo with one of
+these categories is rejected.
+
+EN 16931 has no place for an amount outside the VAT base beside taxed ones,
+so the UBL export writes it the way the HR CIUS does: VAT category `E` named
+`HR:<category>`, with the exemption reason code `VATEX-EU-79-C`, in the one
+exempt entry of the VAT breakdown, and as category `O` under its own scheme in
+the HR breakdown. Importing an eRačun takes that encoding away again, so a
+received amount has the same shape as an issued one.
+
+Limits:
+
+- An invoice with amounts not subject to VAT (O) can't have one: EN 16931
+  allows no exempt amount beside them (BR-O-11).
+- A document level discount can't be one, since a discount needs taxes
+  (BR-32). A received one keeps its exempt tax combo, which the rules reject.
+- A charge with the key `tax` is written with the charge reason code `TX`,
+  which the EN 16931 schematron refuses (BR-CL-20), so leave the key out.
+
 ## Exemption reasons
 
 Every exempt (E) or not taxable (O) line and document level charge needs an
-exemption reason (HR-BR-13, HR-BR-36). The UBL export writes the text of the
-invoice's VAT note for its category, except for an amount left out of the VAT
-base (`POVNAK`, `PP`, `PPMV` or `N`). That amount gets the name of its label:
-"Povratna naknada", "Porez na potrošnju", "Posebni porez na motorna vozila" or
-"Neoporeziva naknada", as the official examples write it on a POVNAK, PP or
-PPMV charge. So the `exempt` VAT note gives the legal ground of the exempt
-supplies, and it is also the one reason of the EN 16931 VAT breakdown, where
-all E amounts share one entry (BR-E-01).
+exemption reason, as a text or a code (HR-BR-13, HR-BR-36), and so does each
+such entry of the VAT breakdown (BR-E-10 and the rules like it).
 
-To give a line or charge a reason of its own, such as "Turistička pristojba"
-for a tourist tax, set the meta `hr-eracun-tax-exemption-reason` on the line's
-item, or on the charge or discount. The import sets it when a received reason
-differs from the one the export would write.
+Give the reason as the VATEX code of the tax combo, in the extension
+`cef-vatex`:
+
+```yaml
+taxes:
+  - cat: VAT
+    key: exempt
+    ext:
+      cef-vatex: "VATEX-EU-132-1B"
+```
+
+The export writes the code on the line or charge and on the VAT breakdown.
+The code belongs to the tax combo, so two exempt lines may have different
+grounds. EN 16931 allows one exempt entry in the VAT breakdown (BR-E-01),
+which gets the first ground; the HR breakdown has an entry for each.
+
+A reason text is optional: a VAT note for the category in `tax.notes`, whose
+text the export writes on the breakdown entry and on every line and charge of
+that category. Each exempt category needs the code or the note.
+
+An amount left out of the VAT base needs neither: the export gives it the
+code `VATEX-EU-79-C`, and a charge its own `reason` as the text.
+
+Importing an eRačun keeps a reason text that the export wouldn't write back
+in the meta `hr-eracun-tax-exemption-reason` of the line's item, or of the
+charge or discount, and the export writes a kept text again. That meta is
+not an input: an issuer gives the reason as above.
 
 ## Consumption tax (PP)
 
@@ -135,8 +203,9 @@ level discount or charge is rejected: discount or charge the lines instead. A
 line with PP needs a VAT combo too, and a supplier not registered for VAT
 can't charge PP yet. Nor can an invoice with amounts not subject to VAT (O):
 EN 16931 allows no exempt amount beside them (BR-O-11). An invoice with the PP
-tax on its lines can't also have a line, charge or discount with the label
-`hr-eracun-tax-category: PP`, the form received invoices carry PP in.
+tax on its lines can't also have a line or charge without taxes with the
+category `hr-eracun-tax-category: PP`, the form received invoices carry PP
+in.
 
 Limits:
 

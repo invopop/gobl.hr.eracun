@@ -88,6 +88,7 @@ func normalizeInvoice(inv *bill.Invoice) {
 	}
 	normalizeIssueTime(inv)
 	normalizeRounding(inv)
+	normalizeAmountsOutsideVAT(inv)
 	normalizePartyEndpoint(inv.Supplier)
 	normalizePartyEndpoint(inv.Customer)
 }
@@ -237,9 +238,9 @@ func billInvoiceRules() *rules.Set {
 		rules.When(is.Func("has S, Z, E or AE taxes", invoiceNeedsBuyerVAT),
 			rules.Field("customer",
 				rules.Field("tax_id",
-					rules.Assert("10", "invoice customer tax ID is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
+					rules.Assert("10", "invoice customer tax ID is required for S, Z, E and AE taxes, and for amounts left out of the VAT base, which the eRačun states as E (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					rules.Field("code",
-						rules.Assert("11", "invoice customer tax ID code is required for S, Z, E and AE taxes (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
+						rules.Assert("11", "invoice customer tax ID code is required for S, Z, E and AE taxes, and for amounts left out of the VAT base, which the eRačun states as E (HR-BR-S-1 to HR-BR-AE-3)", is.Present),
 					),
 				),
 			),
@@ -249,10 +250,8 @@ func billInvoiceRules() *rules.Set {
 		// writes a customer's tax ID code as its VAT identifier, so the
 		// customer gives its OIB another way.
 		rules.When(is.Func("has O taxes", invoiceHasOutsideScope),
-			rules.Field("totals",
-				rules.Assert("32", "invoice with O taxes must not charge PP: the eRačun states PP as an exempt amount, which EN 16931 doesn't allow beside O (BR-O-11)",
-					is.Func("charges no PP", totalsChargeNoConsumptionTax),
-				),
+			rules.Assert("32", "invoice with O taxes must not have PP or an amount left out of the VAT base (a line or charge without taxes): the eRačun states them as exempt amounts, which EN 16931 doesn't allow beside O (BR-O-11)",
+				is.Func("states no exempt amounts", invoiceStatesNoExemptAmounts),
 			),
 			rules.Field("customer",
 				rules.Field("tax_id",
@@ -306,6 +305,51 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
+		// An amount left out of the VAT base is a line or a document level
+		// charge without taxes, with its HR tax category in its own
+		// extensions; the tax combo carries that of a taxed one.
+		rules.Field("lines",
+			rules.Each(
+				rules.When(is.Func("has no taxes", lineOutsideVAT),
+					rules.Field("ext",
+						rules.Assert("33", "line without taxes is an amount left out of the VAT base and requires its HR tax category in the line's ext hr-eracun-tax-category: POVNAK, PPMV, N or PP; a line with VAT needs its VAT in taxes (HR-BR-16)",
+							tax.ExtensionsRequire(ExtKeyTaxCategory),
+							tax.ExtensionsHasCodes(ExtKeyTaxCategory, PassThroughTaxLabels...),
+						),
+					),
+				),
+				rules.When(is.Func("has taxes", lineHasTaxes),
+					rules.Field("ext",
+						rules.Assert("35", "line with taxes must not have ext hr-eracun-tax-category: its VAT combo carries the HR tax category",
+							tax.ExtensionsExclude(ExtKeyTaxCategory),
+						),
+					),
+				),
+			),
+		),
+		rules.Field("charges",
+			rules.Each(
+				rules.When(is.Func("has no taxes", chargeOutsideVAT),
+					rules.Field("reason",
+						rules.Assert("27", "charge without taxes is an amount left out of the VAT base and requires a reason: the name of the fee or tax (HR-BR-13)",
+							is.Present,
+						),
+					),
+					rules.Field("ext",
+						rules.Assert("34", "charge without taxes is an amount left out of the VAT base: its ext hr-eracun-tax-category must be POVNAK, PPMV, N or PP (HR-BR-11)",
+							tax.ExtensionsHasCodes(ExtKeyTaxCategory, PassThroughTaxLabels...),
+						),
+					),
+				),
+				rules.When(is.Func("has taxes", chargeHasTaxes),
+					rules.Field("ext",
+						rules.Assert("36", "charge with taxes must not have ext hr-eracun-tax-category: its VAT combo carries the HR tax category",
+							tax.ExtensionsExclude(ExtKeyTaxCategory),
+						),
+					),
+				),
+			),
+		),
 		// The consumption tax (PP), which the export writes as an exempt
 		// document level charge per rate, on the amounts of the lines that
 		// carry it (CIUS example 5.2).
@@ -339,7 +383,7 @@ func billInvoiceRules() *rules.Set {
 			),
 		),
 		rules.When(is.Func("lines have PP", invoiceHasConsumptionTax),
-			rules.Assert("30", "invoice with the PP tax on its lines must not also have a line, charge or discount with the HR tax category PP: state PP once, as the tax on the lines",
+			rules.Assert("30", "invoice with the PP tax on its lines must not also have a line or charge without taxes with the HR tax category PP: state PP once, as the tax on the lines",
 				is.Func("PP stated once", invoiceHasNoPassThroughPP),
 			),
 		),
@@ -497,7 +541,7 @@ func OperatorName(n *org.Name) string {
 
 func invoiceNeedsBuyerVAT(val any) bool {
 	inv, ok := val.(*bill.Invoice)
-	return ok && inv != nil && invoiceHasTaxCategory(inv, buyerVATTaxCategories)
+	return ok && inv != nil && (invoiceHasTaxCategory(inv, buyerVATTaxCategories) || invoiceHasAmountsOutsideVAT(inv))
 }
 
 func invoiceHasOutsideScope(val any) bool {

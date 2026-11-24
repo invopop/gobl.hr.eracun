@@ -61,41 +61,45 @@ func pairedLines(inv *bill.Invoice, doc *goblubl.Invoice) ([]goblubl.InvoiceLine
 	return lines, nil
 }
 
+// documentCharge is the GOBL side of a document level charge or allowance:
+// its taxes and meta data, and the charge itself when it is one.
+type documentCharge struct {
+	charge *bill.Charge
+	taxes  tax.Set
+	meta   *cbc.Meta
+}
+
 // documentCharges calls fn with each document level charge and allowance of
-// the UBL invoice, and the taxes and meta data of the GOBL charge or discount
-// it corresponds to. Charges and allowances are counted apart, which pairs
-// them in both directions: gobl.ubl writes the charges and then the
-// discounts, and reads the charges and the allowances of a document, in its
-// order, into the charges and the discounts.
-func documentCharges(doc *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta)) {
+// the UBL invoice, and the GOBL charge or discount it corresponds to. Charges
+// and allowances are counted apart, which pairs them in both directions:
+// gobl.ubl writes the charges and then the discounts, and reads the charges
+// and the allowances of a document, in its order, into the charges and the
+// discounts.
+func documentCharges(doc *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblubl.AllowanceCharge, c documentCharge)) {
 	var charges, discounts int
 	for i := range doc.AllowanceCharge {
 		ac := &doc.AllowanceCharge[i]
 		if ac.ChargeIndicator {
 			if charges < len(inv.Charges) && inv.Charges[charges] != nil {
-				fn(ac, inv.Charges[charges].Taxes, &inv.Charges[charges].Meta)
+				c := inv.Charges[charges]
+				fn(ac, documentCharge{charge: c, taxes: c.Taxes, meta: &c.Meta})
 			}
 			charges++
 			continue
 		}
 		if discounts < len(inv.Discounts) && inv.Discounts[discounts] != nil {
-			fn(ac, inv.Discounts[discounts].Taxes, &inv.Discounts[discounts].Meta)
+			d := inv.Discounts[discounts]
+			fn(ac, documentCharge{taxes: d.Taxes, meta: &d.Meta})
 		}
 		discounts++
 	}
 }
 
-// exemptionReason provides the exemption reason the export writes for a line
-// or a document level charge or allowance with these VAT extensions, unless
-// MetaKeyTaxExemptionReason gives one of its own. An amount left out of the
-// VAT base gets the reason of its HR-TB-2 label: it is E in EN 16931 but not
-// an exempt supply, so it doesn't take the E note, which an exempt supply on
-// the same invoice needs for its legal ground. Anything else gets the text of
-// the VAT note for its category.
+// exemptionReason provides the exemption reason text the export writes for
+// a line or a document level charge or allowance with these VAT extensions,
+// unless MetaKeyTaxExemptionReason gives one of its own: the text of the VAT
+// note for its category.
 func exemptionReason(inv *bill.Invoice, ext tax.Extensions) (string, bool) {
-	if r, ok := passThroughReasons[ext.Get(eracun.ExtKeyTaxCategory)]; ok {
-		return r, true
-	}
 	if n := taxNote(inv, ext); n != nil {
 		return n.Text, true
 	}
@@ -128,9 +132,11 @@ func setTaxExt(inv *bill.Invoice, key cbc.Key, value cbc.Code) {
 	inv.Tax.Ext = inv.Tax.Ext.Set(key, value)
 }
 
-func setMeta(meta *cbc.Meta, key cbc.Key, value string) {
+// keepExemptionReason keeps a received exemption reason text in the meta data
+// of the line's item, or of the charge or discount, it came on.
+func keepExemptionReason(meta *cbc.Meta, reason string) {
 	if *meta == nil {
 		*meta = make(cbc.Meta)
 	}
-	(*meta)[key] = value
+	(*meta)[MetaKeyTaxExemptionReason] = reason
 }

@@ -231,7 +231,10 @@ func leafDiff(a, b []leaf) (onlyA, onlyB []leaf) {
 //     unit;
 //   - a number written with other trailing zeros, such as 0.00 for 0;
 //   - a trading name (BT-28) that repeats a party's legal name (BT-27),
-//     which gobl.ubl writes for every format.
+//     which gobl.ubl writes for every format;
+//   - the pass-through VATEX code, which the export gives every amount left
+//     out of the VAT base, where the original may state its reason in words
+//     only.
 func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 	other := original
 	if lost {
@@ -248,6 +251,8 @@ func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 		// Only the flag's presence carries meaning, and the export writes the
 		// VAT Act wording whatever the original said.
 		return slices.ContainsFunc(other, func(o leaf) bool { return o.path == l.path })
+	case strings.HasSuffix(l.path, "/cbc:TaxExemptionReasonCode"):
+		return !lost && l.value == "VATEX-EU-79-C"
 	case strings.HasSuffix(l.path, "/cac:PartyName/cbc:Name") && !lost:
 		legal := strings.TrimSuffix(l.path, "/cac:PartyName/cbc:Name") + "/cac:PartyLegalEntity/cbc:RegistrationName"
 		if hasLeaf(original, leaf{legal, l.value}) {

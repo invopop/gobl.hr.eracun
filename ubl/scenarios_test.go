@@ -11,6 +11,7 @@ import (
 	goblubl "github.com/invopop/gobl.ubl"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
+	"github.com/invopop/gobl/catalogues/cef"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/num"
@@ -130,31 +131,78 @@ var scenarios = []scenario{
 		inv.Customer = customerNonEU()
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-23"},
 
-	// Amounts collected for a third party, outside the VAT base (HR-TB-2
-	// labels POVNAK, PP, PPMV and N).
-	{name: "pass-through POVNAK on a line", edit: func(inv *bill.Invoice) {
-		inv.Lines = append(inv.Lines, line("Povratna naknada", 7, passThrough(eracun.TaxLabelPOVNAK)))
-		addNote(inv, tax.KeyExempt, "Povratna naknada")
-	}, check: lineLabel(1, "HR:POVNAK")},
-	{name: "pass-through PP charge", edit: func(inv *bill.Invoice) {
+	// Amounts left out of the VAT base (HR-TB-2 labels POVNAK, PPMV, N and,
+	// on a received eRačun, PP): a line of its own or a document level
+	// charge, with no taxes and its label in its own extensions. The export
+	// writes each as category E with the pass-through VATEX code.
+	{name: "deposit as a line of its own", edit: func(inv *bill.Invoice) {
+		l := lineOutsideVAT("Povratna naknada", 10, eracun.TaxLabelPOVNAK)
+		l.Quantity = num.MakeAmount(240, 0)
+		inv.Lines = append(inv.Lines, l)
+	}, check: checks(lineLabel(1, "HR:POVNAK"), lineCode(1, "VATEX-EU-79-C"), exemptRow("24.00", "VATEX-EU-79-C"))},
+	{name: "deposit alone, on an invoice with no VAT at all", edit: func(inv *bill.Invoice) {
+		inv.Lines = []*bill.Line{lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK)}
+	}, check: exemptRow("5.00", "VATEX-EU-79-C")},
+	{name: "fee as a charge without a label", edit: func(inv *bill.Invoice) {
+		inv.Charges = []*bill.Charge{{Reason: "Turistička pristojba", Amount: num.MakeAmount(1000, 2)}}
+	}, check: checks(chargeLabel(0, "HR:N"), chargeReason(0, "Turistička pristojba"), exemptRow("10.00", "VATEX-EU-79-C"))},
+	{name: "motor vehicle tax as a charge", edit: func(inv *bill.Invoice) {
+		inv.Charges = []*bill.Charge{{Reason: "Posebni porez na motorna vozila",
+			Amount: num.MakeAmount(200000, 2), Ext: outsideVAT(eracun.TaxLabelPPMV)}}
+	}, check: chargeLabel(0, "HR:PPMV")},
+	{name: "consumption tax as a charge, as a received eRačun has it", edit: func(inv *bill.Invoice) {
 		inv.Charges = []*bill.Charge{{
-			Reason: "Porez na potrošnju",
-			Amount: num.MakeAmount(300, 2),
-			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
+			Reason:  "Porez na potrošnju",
+			Base:    num.NewAmount(10000, 2),
+			Percent: num.NewPercentage(3, 2),
+			Ext:     outsideVAT(eracun.TaxLabelPP),
 		}}
-		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
-	}},
-	{name: "exempt line beside a pass-through PP charge", edit: func(inv *bill.Invoice) {
+	}, check: chargeLabel(0, "HR:PP")},
+	{name: "exempt line beside a deposit line and a fee", edit: func(inv *bill.Invoice) {
+		inv.Lines = append(inv.Lines,
+			line("Usluga", 2000, vatex(tax.KeyExempt, "VATEX-EU-132-1B")),
+			lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
+		inv.Charges = []*bill.Charge{{Reason: "Turistička pristojba", Amount: num.MakeAmount(300, 2)}}
+	},
+		// One E row, with the exempt supply's ground and every E amount.
+		check: checks(lineCode(1, "VATEX-EU-132-1B"), lineCode(2, "VATEX-EU-79-C"), exemptRow("28.00", "VATEX-EU-132-1B")),
+	},
+	{name: "exempt line with a note beside a fee", edit: func(inv *bill.Invoice) {
 		inv.Lines = append(inv.Lines, line("Usluga", 2000, vat(tax.KeyExempt, "")))
-		inv.Charges = []*bill.Charge{{
-			Reason: "Porez na potrošnju",
-			Amount: num.MakeAmount(300, 2),
-			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
-		}}
+		inv.Charges = []*bill.Charge{{Reason: "Turistička pristojba", Amount: num.MakeAmount(300, 2)}}
 		addNote(inv, tax.KeyExempt, "Oslobođeno PDV-a")
 	},
-		check: checks(lineReason(1, "Oslobođeno PDV-a"), chargeReason(0, "Porez na potrošnju")),
+		check: checks(lineReason(1, "Oslobođeno PDV-a"), chargeReason(0, "Turistička pristojba")),
 	},
+	{name: "deposit beside an export line", edit: func(inv *bill.Invoice) {
+		export(inv)
+		inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
+	}},
+	{name: "line without taxes and without its HR tax category", edit: func(inv *bill.Invoice) {
+		l := lineOutsideVAT("Proizvod", 500, eracun.TaxLabelPOVNAK)
+		l.Ext = tax.Extensions{}
+		inv.Lines = append(inv.Lines, l)
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-33"},
+	{name: "charge without taxes and without a reason", edit: func(inv *bill.Invoice) {
+		inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(1000, 2)}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-27"},
+	{name: "deposit as a VAT combo", edit: func(inv *bill.Invoice) {
+		c := vat(tax.KeyExempt, "")
+		c.Ext = outsideVAT(eracun.TaxLabelPOVNAK)
+		inv.Lines = append(inv.Lines, line("Povratna naknada", 500, c))
+		addNote(inv, tax.KeyExempt, "Povratna naknada")
+	}, fault: "GOBL-HR-ERACUN-TAX-COMBO-02"},
+	{name: "deposit beside an outside scope line", edit: func(inv *bill.Invoice) {
+		inv.Customer = customerWithoutVATNumber()
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
+		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
+		inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-32", rule: "BR-O-11"},
+	{name: "deposit beside an export line, buyer without a VAT number", edit: func(inv *bill.Invoice) {
+		export(inv)
+		inv.Customer = customerWithoutVATNumber()
+		inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-11"},
 
 	// The hr regime's consumption tax (PP) on the lines, which the export
 	// writes as the HR CIUS carries it: an exempt charge per rate (CIUS 5.2).
@@ -190,10 +238,9 @@ var scenarios = []scenario{
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
 		addNote(inv, tax.KeyExempt, "Oslobođeno PDV-a")
 	}, check: lineReason(0, "Oslobođeno PDV-a")},
-	{name: "PP beside a pass-through POVNAK line", edit: func(inv *bill.Invoice) {
+	{name: "PP beside a deposit line", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
-		inv.Lines = append(inv.Lines, line("Povratna naknada", 7, passThrough(eracun.TaxLabelPOVNAK)))
-		addNote(inv, tax.KeyExempt, "Povratna naknada")
+		inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 7, eracun.TaxLabelPOVNAK))
 	}},
 	{name: "PP in US dollars", edit: func(inv *bill.Invoice) {
 		inv.Currency = "USD"
@@ -224,27 +271,15 @@ var scenarios = []scenario{
 		inv.Charges = []*bill.Charge{{Reason: "Usluga", Amount: num.MakeAmount(1000, 2),
 			Taxes: tax.Set{vat(tax.KeyStandard, tax.RateGeneral), pp("3%")}}}
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-29"},
-	{name: "PP beside a pass-through PP charge", edit: func(inv *bill.Invoice) {
+	{name: "PP beside a charge with the HR tax category PP", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
-		inv.Charges = []*bill.Charge{{
-			Reason: "Porez na potrošnju",
-			Amount: num.MakeAmount(300, 2),
-			Taxes:  tax.Set{passThrough(eracun.TaxLabelPP)},
-		}}
-		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
+		inv.Charges = []*bill.Charge{{Reason: "Porez na potrošnju", Amount: num.MakeAmount(300, 2), Ext: outsideVAT(eracun.TaxLabelPP)}}
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-30"},
-	{name: "PP beside a pass-through PP line", edit: func(inv *bill.Invoice) {
+	{name: "PP beside a line with the HR tax category PP", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
-		inv.Lines = append(inv.Lines, line("Porez na potrošnju", 300, passThrough(eracun.TaxLabelPP)))
-		addNote(inv, tax.KeyExempt, "Porez na potrošnju")
+		inv.Lines = append(inv.Lines, lineOutsideVAT("Porez na potrošnju", 300, eracun.TaxLabelPP))
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-30"},
 	{name: "PP beside an outside scope line", edit: func(inv *bill.Invoice) {
-		inv.Supplier = &org.Party{
-			Name:       "Obrt A",
-			Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
-			Addresses:  []*org.Address{{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"}},
-			People:     []*org.Person{operator()},
-		}
 		inv.Customer = customerWithoutVATNumber()
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, ""), pp("3%")}
 		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
@@ -619,14 +654,26 @@ func vat(key, rate cbc.Key) *tax.Combo {
 	return &tax.Combo{Category: tax.CategoryVAT, Key: key, Rate: rate}
 }
 
-// passThrough is an amount collected for a third party: exempt in VAT, with
-// its HR-TB-2 label.
-func passThrough(label cbc.Code) *tax.Combo {
-	return &tax.Combo{
-		Category: tax.CategoryVAT,
-		Key:      tax.KeyExempt,
-		Ext:      tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: label}),
-	}
+// vatex is a VAT combo with the VATEX code of its exemption.
+func vatex(key cbc.Key, code cbc.Code) *tax.Combo {
+	return &tax.Combo{Category: tax.CategoryVAT, Key: key, Ext: tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: code})}
+}
+
+// outsideVAT is the HR tax category of an amount left out of the VAT base,
+// as the extensions of the line or charge that carries it.
+func outsideVAT(label cbc.Code) tax.Extensions {
+	return tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: label})
+}
+
+// lineOutsideVAT is a line left out of the VAT base: one with no taxes and
+// its HR tax category on the line. It has a KPD classification, as every
+// line does (HR-BR-25).
+func lineOutsideVAT(name string, cents int64, label cbc.Code) *bill.Line {
+	l := line(name, cents, nil)
+	l.Taxes = nil
+	l.Item.Identities[0].Code = "22.22.19"
+	l.Ext = outsideVAT(label)
+	return l
 }
 
 func addNote(inv *bill.Invoice, key cbc.Key, text string) {
@@ -639,6 +686,52 @@ func lineLabel(i int, want string) func(*goblubl.Invoice) []string {
 		ctc := lineTaxCategory(doc, i)
 		if ctc == nil || ctc.Name == nil || *ctc.Name != want {
 			return []string{fmt.Sprintf("line %d label is not %s", i+1, want)}
+		}
+		return nil
+	}
+}
+
+// lineCode checks the exemption reason code of line i.
+func lineCode(i int, want string) func(*goblubl.Invoice) []string {
+	return func(doc *goblubl.Invoice) []string {
+		ctc := lineTaxCategory(doc, i)
+		if ctc == nil || ctc.TaxExemptionReasonCode == nil || *ctc.TaxExemptionReasonCode != want {
+			return []string{fmt.Sprintf("line %d doesn't carry the exemption reason code %s", i+1, want)}
+		}
+		return nil
+	}
+}
+
+// chargeLabel checks the HR-TB-2 label of document level charge or
+// allowance i.
+func chargeLabel(i int, want string) func(*goblubl.Invoice) []string {
+	return func(doc *goblubl.Invoice) []string {
+		if i >= len(doc.AllowanceCharge) || len(doc.AllowanceCharge[i].TaxCategory) == 0 ||
+			doc.AllowanceCharge[i].TaxCategory[0].Name == nil || *doc.AllowanceCharge[i].TaxCategory[0].Name != want {
+			return []string{fmt.Sprintf("charge %d label is not %s", i+1, want)}
+		}
+		return nil
+	}
+}
+
+// exemptRow checks the one exempt entry of the VAT breakdown: its base and
+// its exemption reason code.
+func exemptRow(base, code string) func(*goblubl.Invoice) []string {
+	return func(doc *goblubl.Invoice) []string {
+		var rows []goblubl.TaxSubtotal
+		if len(doc.TaxTotal) > 0 {
+			for _, st := range doc.TaxTotal[0].TaxSubtotal {
+				if st.TaxCategory.ID != nil && st.TaxCategory.ID.Value == "E" {
+					rows = append(rows, st)
+				}
+			}
+		}
+		if len(rows) != 1 {
+			return []string{fmt.Sprintf("the VAT breakdown has %d exempt entries, want 1", len(rows))}
+		}
+		c := rows[0].TaxCategory.TaxExemptionReasonCode
+		if rows[0].TaxableAmount.Value != base || c == nil || *c != code {
+			return []string{fmt.Sprintf("the exempt entry is not %s with the code %s", base, code)}
 		}
 		return nil
 	}

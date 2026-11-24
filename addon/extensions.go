@@ -41,11 +41,12 @@ const (
 )
 
 // HR VAT category labels (HR-TB-2, "HR oznaka kategorije PDV-a"), the codes of
-// the ExtKeyTaxCategory extension. They are not GOBL tax categories: POVNAK,
-// PP and PPMV are amounts collected for another tax or fee, outside the VAT
-// base. An issuer charges the consumption tax with the hr regime's PP tax
-// category on its lines, which the UBL export writes as an exempt charge with
-// TaxLabelPP; the label is how a received eRačun carries it.
+// the ExtKeyTaxCategory extension. The first nine are the VAT categories, set
+// on a VAT combo from its key and rate. POVNAK, PPMV and N are not VAT
+// categories: they name an amount left out of the VAT base, in the extensions
+// of the line or charge without taxes that carries it. PP names the
+// consumption tax the same way on a received eRačun; an issuer charges it
+// with the hr regime's PP tax category on its lines.
 const (
 	TaxLabelPDV25  cbc.Code = "PDV25"
 	TaxLabelPDV13  cbc.Code = "PDV13"
@@ -71,7 +72,7 @@ const (
 
 // PassThroughTaxLabels are the labels of amounts left out of the VAT base:
 // POVNAK, PP and PPMV, which the supplier collects for a third party, and N,
-// any other non-taxable fee charged with taxable items. They are exempt (E) in
+// any other fee that is not taxed. The HR CIUS writes them as exempt (E) in
 // the EN 16931 core and outside the VAT base (O) in the HR extension.
 var PassThroughTaxLabels = []cbc.Code{
 	TaxLabelPOVNAK, TaxLabelPP, TaxLabelPPMV, TaxLabelN,
@@ -102,10 +103,12 @@ var extensions = []*cbc.Definition{
 		},
 		Desc: i18n.String{
 			i18n.EN: here.Doc(`
-				HR tax category of the tax combo (HR-TB-2). Set automatically from
-				the tax key and rate, except for amounts collected for a third party
-				(POVNAK, PP and PPMV) and any other non-taxable fee charged with
-				taxable items (N), which must be set on an exempt combo.
+				HR tax category (HR-TB-2). On a VAT combo it is set automatically
+				from the tax key and rate. An amount left out of the VAT base, one
+				collected for a third party (POVNAK, PPMV) or any other fee that
+				is not taxed (N), is a line or a document level charge without
+				taxes, and has the category in its own extensions. PP there is how
+				a received eRačun carries the consumption tax.
 			`),
 		},
 		Values: []*cbc.Definition{

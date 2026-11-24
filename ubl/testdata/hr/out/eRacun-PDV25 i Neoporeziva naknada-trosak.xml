@@ -121,6 +121,7 @@
       <cbc:ID>E</cbc:ID>
       <cbc:Name>HR:N</cbc:Name>
       <cbc:Percent>0</cbc:Percent>
+      <cbc:TaxExemptionReasonCode>VATEX-EU-79-C</cbc:TaxExemptionReasonCode>
       <cbc:TaxExemptionReason>Turistička pristojba</cbc:TaxExemptionReason>
       <cac:TaxScheme>
         <cbc:ID>VAT</cbc:ID>
@@ -146,6 +147,7 @@
       <cac:TaxCategory>
         <cbc:ID>E</cbc:ID>
         <cbc:Percent>0</cbc:Percent>
+        <cbc:TaxExemptionReasonCode>VATEX-EU-79-C</cbc:TaxExemptionReasonCode>
         <cbc:TaxExemptionReason>#HR:N#Turistička pristojba</cbc:TaxExemptionReason>
         <cac:TaxScheme>
           <cbc:ID>VAT</cbc:ID>

@@ -33,7 +33,7 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 	if err != nil {
 		return err
 	}
-	importPassThroughTaxCategories(in, inv, lines)
+	importAmountsOutsideVAT(in, inv, lines)
 	importChargeExemptionReasons(in, inv)
 	importLineExemptionReasons(inv, lines)
 
@@ -102,31 +102,13 @@ func importPaymentMeansText(in *goblubl.Invoice, inv *bill.Invoice) {
 	}
 }
 
-// importPassThroughTaxCategories sets the HR tax category of the lines and
-// document level charges that carry an amount left out of the VAT base.
-// The other categories follow from the tax key and rate.
-func importPassThroughTaxCategories(in *goblubl.Invoice, inv *bill.Invoice, lines []goblubl.InvoiceLine) {
-	for i, l := range lines {
-		if inv.Lines[i] == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
-			continue
-		}
-		setPassThroughTaxCategory(inv.Lines[i].Taxes, l.Item.ClassifiedTaxCategory.Name)
-	}
-	documentCharges(in, inv, func(ac *goblubl.AllowanceCharge, ts tax.Set, _ *cbc.Meta) {
-		for _, cat := range ac.TaxCategory {
-			if cat != nil {
-				setPassThroughTaxCategory(ts, cat.Name)
-			}
-		}
-	})
-}
-
-// MetaKeyTaxExemptionReason gives a document level charge or allowance
-// (HR-BT-7), in its meta data, or a line (HR-BT-13), in its item's, a VAT
-// exemption reason of its own, which the export writes instead of the one it
-// would give: the reason of an HR-TB-2 label for an amount left out of the
-// VAT base, or else the VAT note for its category. Import keeps a reason
-// there when it differs from that one.
+// MetaKeyTaxExemptionReason keeps the VAT exemption reason text of a received
+// document level charge or allowance (HR-BT-7), in its meta data, or line
+// (HR-BT-13), in its item's, when the export wouldn't write that text back:
+// the text of the VAT note for a taxed one, the charge's own reason for a
+// charge left out of the VAT base, and none for such a line. The export
+// writes a kept text instead. An issuer gives the reason as the VATEX code of
+// the tax combo.
 const MetaKeyTaxExemptionReason cbc.Key = "hr-eracun-tax-exemption-reason"
 
 // importChargeExemptionReasons keeps the exemption reasons of the document
@@ -135,8 +117,8 @@ const MetaKeyTaxExemptionReason cbc.Key = "hr-eracun-tax-exemption-reason"
 // single charge or allowance. The Tax Administration receives a charge's
 // reason on fiscalization.
 func importChargeExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
-	documentCharges(in, inv, func(ac *goblubl.AllowanceCharge, ts tax.Set, meta *cbc.Meta) {
-		tc := ts.Get(tax.CategoryVAT)
+	documentCharges(in, inv, func(ac *goblubl.AllowanceCharge, c documentCharge) {
+		tc := c.taxes.Get(tax.CategoryVAT)
 		if tc == nil {
 			return
 		}
@@ -148,7 +130,7 @@ func importChargeExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
 			if r, ok := exemptionReason(inv, tc.Ext); reason == "" || (ok && r == reason) {
 				continue
 			}
-			setMeta(meta, MetaKeyTaxExemptionReason, reason)
+			keepExemptionReason(c.meta, reason)
 		}
 	})
 }
@@ -173,22 +155,7 @@ func importLineExemptionReasons(inv *bill.Invoice, lines []goblubl.InvoiceLine) 
 		if r, ok := exemptionReason(inv, tc.Ext); ok && r == reason && tc.Ext.Get(untdid.ExtKeyTaxCategory).In(reasonRequiredCategories...) {
 			continue
 		}
-		setMeta(&inv.Lines[i].Item.Meta, MetaKeyTaxExemptionReason, reason)
-	}
-}
-
-func setPassThroughTaxCategory(ts tax.Set, name *string) {
-	tc := ts.Get(tax.CategoryVAT)
-	if tc == nil || name == nil {
-		return
-	}
-	s, ok := strings.CutPrefix(*name, taxCategoryPrefix)
-	if !ok {
-		return
-	}
-	c := cbc.Code(s)
-	if c.In(eracun.PassThroughTaxLabels...) {
-		tc.Ext = tc.Ext.Set(eracun.ExtKeyTaxCategory, c)
+		keepExemptionReason(&inv.Lines[i].Item.Meta, reason)
 	}
 }
 

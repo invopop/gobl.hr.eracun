@@ -49,35 +49,25 @@ func taxesHaveNoConsumptionTax(val any) bool {
 	return ts.Get(hr.TaxCategoryPP) == nil
 }
 
-// invoiceHasNoPassThroughPP checks that no line, charge or discount has a
-// VAT combo with the HR tax category PP, consumption tax stated as an exempt
-// amount.
+// invoiceHasNoPassThroughPP checks that no line or charge left out of the
+// VAT base has the HR tax category PP, the way a received eRačun carries the
+// consumption tax.
 func invoiceHasNoPassThroughPP(val any) bool {
 	inv, ok := val.(*bill.Invoice)
 	if !ok || inv == nil {
 		return true
 	}
 	for _, l := range inv.Lines {
-		if l != nil && taxesHavePassThroughPP(l.Taxes) {
+		if LineOutsideVAT(l) && l.Ext.Get(ExtKeyTaxCategory) == TaxLabelPP {
 			return false
 		}
 	}
 	for _, c := range inv.Charges {
-		if c != nil && taxesHavePassThroughPP(c.Taxes) {
-			return false
-		}
-	}
-	for _, d := range inv.Discounts {
-		if d != nil && taxesHavePassThroughPP(d.Taxes) {
+		if ChargeOutsideVAT(c) && c.Ext.Get(ExtKeyTaxCategory) == TaxLabelPP {
 			return false
 		}
 	}
 	return true
-}
-
-func taxesHavePassThroughPP(ts tax.Set) bool {
-	tc := ts.Get(tax.CategoryVAT)
-	return tc != nil && tc.Ext.Get(ExtKeyTaxCategory) == TaxLabelPP
 }
 
 func totalsChargeNoConsumptionTax(val any) bool {
