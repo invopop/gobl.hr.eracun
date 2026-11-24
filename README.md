@@ -147,7 +147,11 @@ taxes:
       cef-vatex: "VATEX-EU-132-1B"
 ```
 
-The export writes the code on the line or charge and on the VAT breakdown.
+The code must be one the Tax Administration takes when the invoice is
+fiscalized (Fiskalizacija eRačuna i eIzvještavanje, appendix 16), in upper or
+lower case: the EN 16931 schematron accepts other VATEX codes that the
+fiscalization would refuse. The export writes the code on the line or charge
+and on the VAT breakdown.
 The code belongs to the tax combo, so two exempt lines may have different
 grounds. EN 16931 allows one exempt entry in the VAT breakdown (BR-E-01),
 which gets the first ground; the HR breakdown has an entry for each.

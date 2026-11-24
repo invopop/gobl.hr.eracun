@@ -68,7 +68,7 @@ func exportConsumptionTax(inv *bill.Invoice, out *goblubl.Invoice) error {
 	tt.TaxAmount = goblubl.NewAmount(vat, ccy)
 	exportAccountingVATTotal(inv, out, vat)
 
-	reason := passThroughReasons[eracun.TaxLabelPP]
+	reason := eracun.TaxLabelName(eracun.TaxLabelPP)
 	sum := inv.Currency.Def().Zero()
 	for _, r := range pp.Rates {
 		base := goblubl.NewAmount(r.Base, ccy)

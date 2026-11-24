@@ -114,6 +114,22 @@ var scenarios = []scenario{
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, "")}
 		addNote(inv, tax.KeyExempt, "Oslobođeno PDV čl. 39. Zakona o PDV-u")
 	}},
+	{name: "exempt with a VATEX code and no note", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{vatex("VATEX-EU-132-1B")}
+	}, check: checks(lineCode(0, "VATEX-EU-132-1B"), exemptRow("100.00", "VATEX-EU-132-1B"))},
+	// The schematron and the fiscalization schema take the code in lower
+	// case too.
+	{name: "exempt with a VATEX code in lower case", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{vatex("vatex-eu-132-1b")}
+	}},
+	{name: "exempt with a code that is not a VATEX code", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{vatex("VATEX-EU-79-X")}
+	}, fault: "GOBL-HR-ERACUN-TAX-COMBO-04", rule: "BR-CL-22"},
+	// A CEF VATEX code the fiscalization schema doesn't list passes the
+	// schematron and would fail when the invoice is fiscalized.
+	{name: "exempt with a VATEX code the Tax Administration doesn't list", edit: func(inv *bill.Invoice) {
+		inv.Lines[0].Taxes = tax.Set{vatex("VATEX-EU-135-1")}
+	}, fault: "GOBL-HR-ERACUN-TAX-COMBO-04"},
 	{name: "reverse charge", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyReverseCharge, "")}
 		addNote(inv, tax.KeyReverseCharge, "Prijenos porezne obveze čl. 75. st. 3. Zakona o PDV-u")
@@ -160,7 +176,7 @@ var scenarios = []scenario{
 	}, check: chargeLabel(0, "HR:PP")},
 	{name: "exempt line beside a deposit line and a fee", edit: func(inv *bill.Invoice) {
 		inv.Lines = append(inv.Lines,
-			line("Usluga", 2000, vatex(tax.KeyExempt, "VATEX-EU-132-1B")),
+			line("Usluga", 2000, vatex("VATEX-EU-132-1B")),
 			lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
 		inv.Charges = []*bill.Charge{{Reason: "Turistička pristojba", Amount: num.MakeAmount(300, 2)}}
 	},
@@ -654,9 +670,9 @@ func vat(key, rate cbc.Key) *tax.Combo {
 	return &tax.Combo{Category: tax.CategoryVAT, Key: key, Rate: rate}
 }
 
-// vatex is a VAT combo with the VATEX code of its exemption.
-func vatex(key cbc.Key, code cbc.Code) *tax.Combo {
-	return &tax.Combo{Category: tax.CategoryVAT, Key: key, Ext: tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: code})}
+// vatex is an exempt VAT combo with the VATEX code of its exemption.
+func vatex(code cbc.Code) *tax.Combo {
+	return &tax.Combo{Category: tax.CategoryVAT, Key: tax.KeyExempt, Ext: tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: code})}
 }
 
 // outsideVAT is the HR tax category of an amount left out of the VAT base,

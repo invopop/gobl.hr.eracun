@@ -276,7 +276,7 @@ func TestExemptSupplyGivesTheBreakdownReason(t *testing.T) {
 	inv.Tax.Notes = nil
 	inv.Lines[0].Taxes = nil
 	inv.Lines[0].Ext = outsideVAT(eracun.TaxLabelPOVNAK)
-	inv.Lines[1].Taxes = tax.Set{vatex(tax.KeyExempt, "VATEX-EU-132")}
+	inv.Lines[1].Taxes = tax.Set{vatex("VATEX-EU-132")}
 	inv.Discounts = nil
 	doc := exportTestInvoice(t, inv)
 	var exempt []goblubl.TaxSubtotal

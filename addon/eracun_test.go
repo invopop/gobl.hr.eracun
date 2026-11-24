@@ -7,6 +7,7 @@ import (
 	"github.com/invopop/gobl/addons/eu/en16931"
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/cal"
+	"github.com/invopop/gobl/catalogues/cef"
 	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/l10n"
 	"github.com/invopop/gobl/num"
@@ -281,6 +282,14 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
 			inv.Lines = append(inv.Lines, lineOutsideVAT("Porez na potrošnju", 300, eracun.TaxLabelPP))
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-30"},
+		{"VATEX code the Tax Administration doesn't list", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt,
+				Ext: tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: "VATEX-EU-135-1"})}}
+		}, "GOBL-HR-ERACUN-TAX-COMBO-04"},
+		{"VATEX code that is not a code", func(inv *bill.Invoice) {
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt,
+				Ext: tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: "VATEX-EU-79-X"})}}
+		}, "GOBL-HR-ERACUN-TAX-COMBO-04"},
 		{"pass-through category on an exempt combo", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Ext: outsideVATLabel(eracun.TaxLabelPOVNAK)}}
 			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyExempt, Text: "Povratna naknada"}}
@@ -996,4 +1005,26 @@ func TestInformativeChargeIsNotOutsideVAT(t *testing.T) {
 	require.NoError(t, rules.Validate(inv))
 	assert.False(t, eracun.ChargeOutsideVAT(inv.Charges[0]))
 	assert.False(t, inv.Charges[0].Ext.Has(eracun.ExtKeyTaxCategory))
+}
+
+// TestVATEXCodes checks that a VAT combo may give any exemption reason code
+// of the Tax Administration's list, and needs no VAT note then.
+func TestVATEXCodes(t *testing.T) {
+	assert.Len(t, eracun.VATEXCodes, 59)
+	for _, code := range []cbc.Code{"VATEX-EU-132-1B", "VATEX-EU-79-C", "VATEX-EU-143-1FA", "VATEX-FR-CNWVAT"} {
+		t.Run(code.String(), func(t *testing.T) {
+			inv := testInvoice()
+			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt,
+				Ext: tax.ExtensionsOf(cbc.CodeMap{cef.ExtKeyVATEX: code})}}
+			require.NoError(t, inv.Calculate())
+			require.NoError(t, rules.Validate(inv))
+		})
+	}
+}
+
+// TestTaxLabelName checks the Croatian name of an HR tax category.
+func TestTaxLabelName(t *testing.T) {
+	assert.Equal(t, "Porez na potrošnju", eracun.TaxLabelName(eracun.TaxLabelPP))
+	assert.Equal(t, "Povratna naknada", eracun.TaxLabelName(eracun.TaxLabelPOVNAK))
+	assert.Empty(t, eracun.TaxLabelName("XX"))
 }

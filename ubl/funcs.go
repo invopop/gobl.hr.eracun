@@ -2,7 +2,6 @@ package ubl
 
 import (
 	"github.com/invopop/gobl"
-	eracun "github.com/invopop/gobl.hr.eracun/addon"
 	goblubl "github.com/invopop/gobl.ubl"
 	"github.com/invopop/gobl/addons/eu/en16931"
 	"github.com/invopop/gobl/bill"
@@ -15,18 +14,6 @@ import (
 // document level charges must carry an exemption reason in the HR CIUS
 // (HR-BR-13, HR-BR-36): the export writes exemptionReason for them.
 var reasonRequiredCategories = []cbc.Code{en16931.TaxCategoryExempt, en16931.TaxCategoryOutsideScope}
-
-// passThroughReasons are the exemption reasons of the amounts left out of the
-// VAT base (Art. 33(3) of the VAT Act), by HR-TB-2 label: the label's name,
-// as the official examples write it on a POVNAK, PP or PPMV charge. The
-// official POVNAK line example writes "#HR:POVNAK#Povratna naknada"; import
-// keeps that form in MetaKeyTaxExemptionReason.
-var passThroughReasons = map[cbc.Code]string{
-	eracun.TaxLabelPOVNAK: "Povratna naknada",
-	eracun.TaxLabelPP:     "Porez na potrošnju",
-	eracun.TaxLabelPPMV:   "Posebni porez na motorna vozila",
-	eracun.TaxLabelN:      "Neoporeziva naknada",
-}
 
 // reasonAllowedCategories are the EN 16931 VAT categories that may carry an
 // exemption reason: a reason kept on import is written back for them.
