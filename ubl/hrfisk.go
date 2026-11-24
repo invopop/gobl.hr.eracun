@@ -2,6 +2,8 @@ package ubl
 
 import (
 	"encoding/xml"
+	"errors"
+	"fmt"
 
 	goblubl "github.com/invopop/gobl.ubl"
 )
@@ -59,17 +61,44 @@ type HRLegalMonetaryTotal struct {
 	OutOfScopeOfVATAmount goblubl.Amount `xml:"hrextac:OutOfScopeOfVATAmount"`
 }
 
-// ExtensionNamespaces implements goblubl.ExtensionData.
-func (*HRFISK20Data) ExtensionNamespaces() map[string]string {
-	return map[string]string{
-		"hrextac": NamespaceHRExtension,
-		"cbc":     goblubl.NamespaceCBC,
-	}
+// hrFISK20DataName is the name of the HR extension data element.
+var hrFISK20DataName = xml.Name{Space: NamespaceHRExtension, Local: "HRFISK20Data"}
+
+// hrNamespaces maps the prefixes of the HR extension types' xml tags to their
+// namespaces.
+var hrNamespaces = map[string]string{
+	"hrextac": NamespaceHRExtension,
+	"cbc":     goblubl.NamespaceCBC,
 }
 
 // addHRFISK20Data adds the HR extension data to the invoice as its own UBL
-// extension.
+// extension, with no ExtensionURI, as the HR specification defines none.
 func addHRFISK20Data(out *goblubl.Invoice, data *HRFISK20Data) {
 	data.Namespace = NamespaceHRExtension
-	out.AddExtension(goblubl.NewExtension(data))
+	out.AddExtension(goblubl.NewExtension("", data))
+}
+
+// FindHRFISK20Data returns the HR extension data of the invoice, or nil when
+// it has none. HR extensions have no ExtensionURI, and an invoice may also
+// carry a signature extension, in any order, so the data is found by the
+// name of its element. The first is taken, as the HR specification allows
+// one. Content that is not well-formed is an error; content read by
+// goblubl.Decode always is.
+func FindHRFISK20Data(in *goblubl.Invoice) (*HRFISK20Data, error) {
+	if in.Extensions == nil {
+		return nil, nil
+	}
+	for _, ext := range in.Extensions.Extension {
+		data, err := goblubl.DecodeExtension[HRFISK20Data](ext.ExtensionContent, hrNamespaces)
+		if errors.Is(err, goblubl.ErrNoExtensionContent) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("decoding extension content: %w", err)
+		}
+		if data.XMLName == hrFISK20DataName {
+			return data, nil
+		}
+	}
+	return nil, nil
 }

@@ -205,8 +205,9 @@ func TestConsumptionTaxRates(t *testing.T) {
 	}
 
 	// The HR breakdown has PP out of the VAT scope (O), under the LOC scheme.
-	hrd, ok := goblubl.FindExtensionData[*hrubl.HRFISK20Data](doc.Extensions)
-	require.True(t, ok)
+	hrd, err := hrubl.FindHRFISK20Data(doc)
+	require.NoError(t, err)
+	require.NotNil(t, hrd)
 	require.NotNil(t, hrd.HRTaxTotal)
 	assert.Equal(t, "8.47", hrd.HRTaxTotal.TaxAmount.Value)
 	// One entry for PP, whatever its rates, like each other HR category.

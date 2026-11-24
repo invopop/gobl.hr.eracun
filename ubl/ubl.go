@@ -7,8 +7,6 @@
 package ubl
 
 import (
-	"encoding/xml"
-
 	eracun "github.com/invopop/gobl.hr.eracun/addon"
 	goblubl "github.com/invopop/gobl.ubl"
 	"github.com/invopop/gobl/bill"
@@ -50,5 +48,4 @@ var FormatHRCIUS = goblubl.Format{
 
 func init() {
 	goblubl.RegisterFormats(FormatHRCIUS)
-	goblubl.RegisterExtensionData(xml.Name{Space: NamespaceHRExtension, Local: "HRFISK20Data"}, func() goblubl.ExtensionData { return new(HRFISK20Data) })
 }
