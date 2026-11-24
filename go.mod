@@ -3,7 +3,7 @@ module github.com/invopop/gobl.hr.eracun
 go 1.25.0
 
 require (
-	github.com/invopop/gobl v0.511.0
+	github.com/invopop/gobl v0.512.0
 	github.com/invopop/gobl.ubl v0.94.0
 	github.com/invopop/phorm v0.1.5
 	github.com/stretchr/testify v1.11.1
@@ -17,7 +17,7 @@ require (
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/expr-lang/expr v1.17.8 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/invopop/validation v0.8.0 // indirect
@@ -33,10 +33,10 @@ require (
 )
 
 // UNRELEASED DEPENDENCIES: remove before tagging or merging. These pin the
-// unreleased hr regime (gobl) and the generic HR fields (gobl.ubl) to branch
-// commits. Pin both to released versions (or main pseudo-versions) once they
-// are merged; the README lists what each pin waits for.
+// unreleased hr regime (gobl, merged to main) and the generic HR fields
+// (gobl.ubl, branch commits) by commit. Pin both to released versions once
+// they are released; the README lists what each pin waits for.
 replace (
-	github.com/invopop/gobl => github.com/invopop/gobl v0.510.1-0.20261112105327-8558e34a3da4
-	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.99.1-0.20261124163603-f6e60bb69b1e
+	github.com/invopop/gobl => github.com/invopop/gobl v0.512.1-0.20261123171451-b0bc8848d3f7
+	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.103.1-0.20261124165658-2857f32afd6c
 )
