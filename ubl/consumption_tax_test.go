@@ -445,6 +445,15 @@ func TestConsumptionTaxStaysCharge(t *testing.T) {
 			},
 		},
 		{
+			// The 2% has no charge, and a move would drop it with the 3%.
+			name: "a line with two rates",
+			inv:  ppOnALine,
+			edit: func(doc *goblubl.Invoice) {
+				props := doc.InvoiceLines[0].Item.AdditionalItemProperty
+				*props = append(*props, goblubl.AdditionalItemProperty{Name: "HR:PP", Value: "2"})
+			},
+		},
+		{
 			name: "totals that differ from the declared ones",
 			inv:  catering,
 			edit: func(doc *goblubl.Invoice) {

@@ -182,7 +182,8 @@ func exportAccountingVATTotal(inv *bill.Invoice, out *goblubl.Invoice, vat num.A
 // moves onto the lines whose item attribute HR:PP gives its rate, which lose
 // that attribute, and the exempt VAT note goes too when no exempt amount is
 // left: the import read it from the VAT breakdown's exempt entry, which the
-// PP charges alone made up.
+// PP charges alone made up. Nothing moves when a line has more than one
+// HR:PP attribute, since the move would lose the others.
 //
 // The move is made on a copy of the invoice, which replaces it only when the
 // copy calculates, at each rate moved, the base and amount of that rate's
@@ -200,7 +201,8 @@ func exportAccountingVATTotal(inv *bill.Invoice, out *goblubl.Invoice, vat num.A
 // document is only read.
 func importConsumptionTax(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error {
 	inv, _, ok := invoices(env, doc)
-	if !ok || !slices.ContainsFunc(inv.Charges, isExportedConsumptionTaxCharge) {
+	if !ok || !slices.ContainsFunc(inv.Charges, isExportedConsumptionTaxCharge) ||
+		slices.ContainsFunc(inv.Lines, hasSeveralConsumptionTaxAttributes) {
 		return nil
 	}
 	data, err := json.Marshal(inv)
@@ -302,6 +304,21 @@ func hasConsumptionTaxAttribute(it *org.Item, rate num.Percentage) bool {
 		}
 	}
 	return false
+}
+
+// hasSeveralConsumptionTaxAttributes says whether the line has more than one
+// HR:PP attribute. The export writes one, with the line's PP rate, so a move
+// would lose the others.
+func hasSeveralConsumptionTaxAttributes(l *bill.Line) bool {
+	n := 0
+	if l != nil && l.Item != nil {
+		for _, a := range l.Item.Attributes {
+			if a != nil && a.Label == eracun.ItemAttributeConsumptionTax {
+				n++
+			}
+		}
+	}
+	return n > 1
 }
 
 // removeExemptNote removes the invoice's exempt VAT note.
