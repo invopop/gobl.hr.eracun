@@ -41,9 +41,6 @@ var FormatHRCIUS = goblubl.Format{
 	Specifications: []goblubl.Specification{SpecificationApplicationResponse},
 	ExportFuncs:    []goblubl.ExportFunc{exportHR, exportApplicationResponse},
 	ImportFuncs:    []goblubl.ImportFunc{importHR, importApplicationResponse},
-	// The PP charges move onto the lines once the totals are reconciled, so
-	// a move can't hide a difference from the declared totals.
-	ReconciledImportFuncs: []goblubl.ImportFunc{importConsumptionTax},
 }
 
 func init() {

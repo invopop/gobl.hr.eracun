@@ -101,10 +101,9 @@ func newAddon() *tax.AddonDef {
 				The consumption tax on drinks in catering is the hr regime's PP tax,
 				charged on each line beside its VAT at up to 3%. The UBL export writes
 				it as the HR CIUS carries it: an exempt document level charge per
-				rate, on the amounts of the lines that carry it, and the HR:PP item
-				property with the rate on each of those lines. So PP on a document
+				rate, on the amounts of the lines that carry it. So PP on a document
 				level discount or charge is refused, as is PP from a supplier outside
-				the VAT system for now.
+				the VAT system for now. A received eRačun keeps PP as that charge.
 
 				Statuses are application responses the buyer sends the supplier,
 				each with one line about one invoice. A rejection needs a

@@ -215,10 +215,6 @@ var scenarios = []scenario{
 	{name: "PP without VAT on its line", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = tax.Set{pp("3%")}
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-26"},
-	{name: "PP line with its own HR:PP attribute", edit: func(inv *bill.Invoice) {
-		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
-		inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: "HR:PP", Text: "3"}}
-	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-27"},
 	{name: "PP on a document discount", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
 		inv.Discounts = []*bill.Discount{{Reason: "Popust", Amount: num.MakeAmount(1000, 2),

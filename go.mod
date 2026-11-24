@@ -38,5 +38,5 @@ require (
 // they are released; the README lists what each pin waits for.
 replace (
 	github.com/invopop/gobl => github.com/invopop/gobl v0.512.1-0.20261123171451-b0bc8848d3f7
-	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.103.1-0.20261124165658-2857f32afd6c
+	github.com/invopop/gobl.ubl => github.com/invopop/gobl.ubl v0.103.1-0.20261124165553-fc466d68d5f7
 )

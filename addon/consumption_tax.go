@@ -3,7 +3,6 @@ package eracun
 import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/num"
-	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/regimes/hr"
 	"github.com/invopop/gobl/tax"
 )
@@ -14,12 +13,6 @@ import (
 // of the VAT base, an exempt document level charge per rate (CIUS example
 // 5.2), and the UBL export writes it that way. These rules refuse the PP the
 // export can't write.
-
-// ItemAttributeConsumptionTax is the label of the item attribute the UBL
-// export writes on each line with the consumption tax, with its percent, so
-// the buyer can tell which lines a PP charge covers. It is an Invopop
-// convention, not part of the HR CIUS.
-const ItemAttributeConsumptionTax = "HR:PP"
 
 // maxConsumptionTaxPercent is the highest consumption tax rate a
 // municipality or city may set (Local Taxes Act).
@@ -103,14 +96,4 @@ func invoiceHasConsumptionTax(val any) bool {
 		}
 	}
 	return false
-}
-
-func attributesHaveNoConsumptionTax(val any) bool {
-	attrs, _ := val.([]*org.Attribute)
-	for _, a := range attrs {
-		if a != nil && a.Label == ItemAttributeConsumptionTax {
-			return false
-		}
-	}
-	return true
 }

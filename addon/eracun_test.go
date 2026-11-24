@@ -257,10 +257,6 @@ func TestInvoiceRules(t *testing.T) {
 		{"PP without VAT on its line", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes = tax.Set{consumptionTax(num.MakePercentage(3, 2))}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-26"},
-		{"PP line with an HR:PP attribute", func(inv *bill.Invoice) {
-			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
-			inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: eracun.ItemAttributeConsumptionTax, Text: "3"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-27"},
 		{"PP on a document discount", func(inv *bill.Invoice) {
 			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{
 				{Category: tax.CategoryVAT, Rate: tax.RateGeneral}, consumptionTax(num.MakePercentage(3, 2)),
@@ -952,18 +948,10 @@ func TestConsumptionTaxValid(t *testing.T) {
 		t.Run(p.String(), func(t *testing.T) {
 			inv := testInvoice()
 			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(p))
-			// A line's own attributes stay, the HR:PP label aside.
+			// A line's own attributes stay.
 			inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: "Zapremina", Text: "0,5 l"}}
 			require.NoError(t, inv.Calculate())
 			require.NoError(t, rules.Validate(inv))
 		})
 	}
-	t.Run("HR:PP attribute on a line without PP", func(t *testing.T) {
-		// An invoice imported from an eRačun keeps the attribute the export
-		// wrote, beside the PP charge.
-		inv := testInvoice()
-		inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: eracun.ItemAttributeConsumptionTax, Text: "3"}}
-		require.NoError(t, inv.Calculate())
-		require.NoError(t, rules.Validate(inv))
-	})
 }

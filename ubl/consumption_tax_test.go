@@ -1,11 +1,8 @@
 package ubl_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 	"testing"
 
 	"github.com/invopop/gobl"
@@ -15,7 +12,6 @@ import (
 	"github.com/invopop/gobl/bill"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/num"
-	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/regimes/hr"
 	"github.com/invopop/gobl/tax"
 	"github.com/stretchr/testify/assert"
@@ -46,34 +42,23 @@ func exportInvoice(t *testing.T, inv *bill.Invoice) (*bill.Invoice, *goblubl.Inv
 	return env.Extract().(*bill.Invoice), doc
 }
 
-// officialPPExample is the official example that carries the consumption
-// tax, "eRacun-PDV-NEOP-PP-trosak" (CIUS 5.2): a 100.00 line at 25% with a
-// 3% PP charge.
-const officialPPExample = "eRacun-PDV-NEOP-PP-trosak"
-
-// hrPPProperty is the HR:PP item property the export writes on a line with
-// PP at 3%, after the line's tax category.
-const hrPPProperty = `</cac:ClassifiedTaxCategory>
-      <cac:AdditionalItemProperty>
-        <cbc:Name>HR:PP</cbc:Name>
-        <cbc:Value>3</cbc:Value>
-      </cac:AdditionalItemProperty>`
-
 // TestConsumptionTaxAsOfficialExample checks that the consumption tax on a
-// line exports the way the official example that carries it does: the
-// example imported, with its PP charge moved onto its line as the hr
-// regime's PP tax, exports as the example itself, plus the HR:PP item
-// property on the line. The import leaves the charge as it is, since nothing
-// in the example ties it to its line, so the test moves it.
+// line exports the way the official example that carries it does,
+// "eRacun-PDV-NEOP-PP-trosak" (CIUS 5.2): the example imported, with its PP
+// charge moved onto its line as the hr regime's PP tax, exports as the
+// example itself.
 func TestConsumptionTaxAsOfficialExample(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("testdata", "hr", officialPPExample+".xml"))
+	const name = "eRacun-PDV-NEOP-PP-trosak"
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", name+".xml"))
 	require.NoError(t, err)
-	env := importUBL(t, data)
+	in, err := goblubl.Decode(data)
+	require.NoError(t, err)
+	env, err := goblubl.Import(in)
+	require.NoError(t, err)
 
 	inv := env.Extract().(*bill.Invoice)
 	require.Len(t, inv.Charges, 1)
 	require.Equal(t, eracun.TaxLabelPP, inv.Charges[0].Taxes.Get(tax.CategoryVAT).Ext.Get(eracun.ExtKeyTaxCategory))
-	require.Nil(t, inv.Lines[0].Taxes.Get(hr.TaxCategoryPP))
 	inv.Charges = nil
 	inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
 	// The import reads the PP charge's exemption reason as the exempt note,
@@ -83,51 +68,14 @@ func TestConsumptionTaxAsOfficialExample(t *testing.T) {
 	require.NoError(t, env.Calculate())
 	require.NoError(t, env.Validate())
 
-	assert.Equal(t, officialPPExampleWithProperty(t), exportXML(t, env))
-}
-
-// TestConsumptionTaxImportsOfficialExampleWithProperty checks that the
-// official example, given the HR:PP property the export writes on its line,
-// imports with its PP charge moved onto the line, and exports back as it
-// came in.
-func TestConsumptionTaxImportsOfficialExampleWithProperty(t *testing.T) {
-	want := officialPPExampleWithProperty(t)
-	data, err := os.ReadFile(filepath.Join("testdata", "hr", officialPPExample+".xml"))
-	require.NoError(t, err)
-	in := strings.Replace(string(data), "</cac:ClassifiedTaxCategory>", hrPPProperty, 1)
-	env := importUBL(t, []byte(in))
-	require.NoError(t, env.Validate())
-
-	inv := env.Extract().(*bill.Invoice)
-	assert.Empty(t, inv.Charges)
-	assert.Nil(t, inv.Tax.Notes)
-	assert.Nil(t, inv.Lines[0].Item.Attributes)
-	require.NotNil(t, inv.Lines[0].Taxes.Get(hr.TaxCategoryPP))
-	assert.Equal(t, "3%", inv.Lines[0].Taxes.Get(hr.TaxCategoryPP).Percent.String())
-	assert.Equal(t, "3.00", inv.Totals.Taxes.Category(hr.TaxCategoryPP).Amount.String())
-	assert.Equal(t, "128.00", inv.Totals.Payable.String())
-
-	assert.Equal(t, want, exportXML(t, env))
-}
-
-// officialPPExampleWithProperty is the golden file of the official PP example
-// with the HR:PP property on its line.
-func officialPPExampleWithProperty(t *testing.T) string {
-	t.Helper()
-	want, err := os.ReadFile(filepath.Join("testdata", "hr", "out", officialPPExample+".xml"))
-	require.NoError(t, err)
-	const end = "</cac:ClassifiedTaxCategory>"
-	require.Equal(t, 1, strings.Count(string(want), end))
-	return strings.Replace(string(want), end, hrPPProperty, 1)
-}
-
-func exportXML(t *testing.T, env *gobl.Envelope) string {
-	t.Helper()
 	out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
 	require.NoError(t, err)
-	data, err := goblubl.Encode(out)
+	got, err := goblubl.Encode(out)
 	require.NoError(t, err)
-	return string(data)
+
+	want, err := os.ReadFile(filepath.Join("testdata", "hr", "out", name+".xml"))
+	require.NoError(t, err)
+	assert.Equal(t, string(want), string(got))
 }
 
 // catering is an invoice for a beer and a wine, each with the consumption tax
@@ -190,18 +138,9 @@ func TestConsumptionTaxRates(t *testing.T) {
 	assert.Equal(t, "51.58", m.TaxInclusiveAmount.Value)
 	assert.Equal(t, "51.58", m.PayableAmount.Value)
 
-	// The rate on each line that carries it.
-	for i, want := range []string{"3", "2", ""} {
-		it := doc.InvoiceLines[i].Item
-		var got string
-		if it.AdditionalItemProperty != nil {
-			for _, p := range *it.AdditionalItemProperty {
-				if p.Name == "HR:PP" {
-					got = p.Value
-				}
-			}
-		}
-		assert.Equal(t, want, got, "line %d", i+1)
+	// The lines say nothing of PP: the HR CIUS has no element for it.
+	for i := range doc.InvoiceLines {
+		assert.Nil(t, doc.InvoiceLines[i].Item.AdditionalItemProperty, "line %d", i+1)
 	}
 
 	// The HR breakdown has PP out of the VAT scope (O), under the LOC scheme.
@@ -302,329 +241,23 @@ func TestConsumptionTaxExportRefusals(t *testing.T) {
 	}
 }
 
-// TestConsumptionTaxRoundTrip checks that every shape of PP on the lines
-// that TestScenarios accepts imports back as it was issued: the PP charges
-// the export writes move back onto the lines they came from, at the same
-// rates, the amounts stay the same, and the invoice exports to the same
-// eRačun again.
-func TestConsumptionTaxRoundTrip(t *testing.T) {
-	var rows int
-	for _, sc := range scenarios {
-		inv := scenarioInvoice()
-		if sc.edit != nil {
-			sc.edit(inv)
-		}
-		if sc.fault != "" || !slices.ContainsFunc(inv.Lines, func(l *bill.Line) bool { return l.Taxes.Get(hr.TaxCategoryPP) != nil }) {
-			continue
-		}
-		rows++
-		t.Run(sc.name, func(t *testing.T) {
-			env, err := gobl.Envelop(inv)
-			require.NoError(t, err)
-			require.NoError(t, env.Validate())
-			// The export takes VAT out of prices that include it, so what
-			// the import must give back is read first.
-			want := roundTripped(env.Extract().(*bill.Invoice))
-
-			first := exportXML(t, env)
-			got := importUBL(t, []byte(first))
-			require.NoError(t, got.Validate())
-			// And exports as it did, which TestScenarios checks against the
-			// schematron.
-			assert.Equal(t, first, exportXML(t, got))
-			inv := got.Extract().(*bill.Invoice)
-			assert.Equal(t, want, roundTripped(inv))
-			assert.Empty(t, inv.Charges)
-			for i, l := range inv.Lines {
-				for _, a := range l.Item.Attributes {
-					assert.NotEqual(t, "HR:PP", a.Label, "line %d", i+1)
-				}
-			}
-		})
-	}
-	assert.Equal(t, 11, rows, "accepted PP rows in TestScenarios")
-}
-
-// TestConsumptionTaxStaysCharge checks that the import leaves a PP charge,
-// and the lines it would cover, exactly as an import that never moves PP
-// does, whenever the lines don't account for it exactly or moving it would
-// give an invoice the addon refuses.
-func TestConsumptionTaxStaysCharge(t *testing.T) {
-	// removeProperty takes the HR:PP item property off line i.
-	removeProperty := func(i int) func(*goblubl.Invoice) {
-		return func(doc *goblubl.Invoice) {
-			doc.InvoiceLines[i].Item.AdditionalItemProperty = nil
-		}
-	}
-	tests := []struct {
-		name string
-		inv  func() *bill.Invoice
-		edit func(*goblubl.Invoice)
-	}{
-		{
-			// The 3% charge is on 1.21 + 10.03, but only the first line
-			// says it has PP.
-			name: "lines that don't add up to the base",
-			inv: func() *bill.Invoice {
-				inv := scenarioInvoice()
-				roundingApart(inv)
-				for _, l := range inv.Lines {
-					l.Taxes = append(l.Taxes, pp("3%"))
-				}
-				return inv
-			},
-			edit: removeProperty(1),
-		},
-		{
-			// The 3% charge matches the beer, but nothing says which line
-			// the 2% one is on, and the addon refuses PP on the lines beside
-			// a PP charge.
-			name: "one of two rates without its lines",
-			inv:  catering,
-			edit: removeProperty(1),
-		},
-		{
-			// 3% of 12.01 is the 0.36 of the beer's 12.00 too, so the
-			// amounts would stay, but the base wouldn't.
-			name: "a base a cent off the lines",
-			inv:  catering,
-			edit: func(doc *goblubl.Invoice) {
-				doc.AllowanceCharge[0].BaseAmount.Value = "12.01"
-			},
-		},
-		{
-			name: "a rate the line doesn't give",
-			inv:  catering,
-			edit: func(doc *goblubl.Invoice) {
-				(*doc.InvoiceLines[0].Item.AdditionalItemProperty)[0].Value = "2"
-			},
-		},
-		{
-			// The HR:PP property gives only the rate, so two charges at one
-			// rate can't be told apart: both are 3% of the line's 100.00.
-			name: "two charges at one rate",
-			inv:  ppOnALine,
-			edit: func(doc *goblubl.Invoice) {
-				doc.AllowanceCharge = append(doc.AllowanceCharge, doc.AllowanceCharge[0])
-				doc.TaxTotal[0].TaxSubtotal[1].TaxableAmount.Value = "6.00"
-				m := &doc.LegalMonetaryTotal
-				m.TaxExclusiveAmount.Value = "106.00"
-				m.ChargeTotalAmount.Value = "6.00"
-				m.TaxInclusiveAmount.Value = "131.00"
-				m.PayableAmount.Value = "131.00"
-			},
-		},
-		{
-			// The export would write the charge back with its own reason.
-			name: "a charge with a reason of its own",
-			inv:  ppOnALine,
-			edit: func(doc *goblubl.Invoice) {
-				doc.AllowanceCharge[0].AllowanceChargeReason = ptr("#HR:PP#Porez na potrošnju Grada Zagreba")
-			},
-		},
-		{
-			// The import keeps this reason in the charge's meta data.
-			name: "a charge with an exemption reason of its own",
-			inv:  ppOnALine,
-			edit: func(doc *goblubl.Invoice) {
-				doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason = ptr("Porez na potrošnju Grada Zagreba")
-			},
-		},
-		{
-			// The rate (BT-101) is optional; without it the charge has none.
-			name: "a charge without its rate",
-			inv:  ppOnALine,
-			edit: func(doc *goblubl.Invoice) {
-				doc.AllowanceCharge[0].MultiplierFactorNumeric = nil
-			},
-		},
-		{
-			name: "a rate the line gives in another form",
-			inv:  ppOnALine,
-			edit: func(doc *goblubl.Invoice) {
-				(*doc.InvoiceLines[0].Item.AdditionalItemProperty)[0].Value = "3%"
-			},
-		},
-		{
-			// The 2% has no charge, and a move would drop it with the 3%.
-			name: "a line with two rates",
-			inv:  ppOnALine,
-			edit: func(doc *goblubl.Invoice) {
-				props := doc.InvoiceLines[0].Item.AdditionalItemProperty
-				*props = append(*props, goblubl.AdditionalItemProperty{Name: "HR:PP", Value: "2"})
-			},
-		},
-		{
-			name: "totals that differ from the declared ones",
-			inv:  catering,
-			edit: func(doc *goblubl.Invoice) {
-				doc.LegalMonetaryTotal.PayableAmount.Value = "51.59"
-			},
-		},
-		{
-			name: "a supplier outside VAT",
-			inv: func() *bill.Invoice {
-				inv := scenarioInvoice()
-				inv.Supplier = supplierOutsideVAT()
-				inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
-				addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
-				return inv
-			},
-		},
-		{
-			// The addon refuses the supplier's VAT number beside O amounts
-			// already, and PP beside them on the lines too (BR-O-11).
-			name: "an amount outside the VAT scope",
-			inv: func() *bill.Invoice {
-				inv := scenarioInvoice()
-				inv.Customer = customerWithoutVATNumber()
-				inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, ""), pp("3%")}
-				addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
-				return inv
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			env, err := gobl.Envelop(tt.inv())
-			require.NoError(t, err)
-			require.NoError(t, env.Calculate())
-			out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
-			require.NoError(t, err)
-			doc := out.(*goblubl.Invoice)
-			if tt.edit != nil {
-				tt.edit(doc)
-			}
-			data, err := goblubl.Encode(doc)
-			require.NoError(t, err)
-
-			got := importUBL(t, data)
-			inv := got.Extract().(*bill.Invoice)
-			require.NotEmpty(t, inv.Charges)
-			assert.Equal(t, invoiceJSON(t, importUBLAsCharge(t, data)), invoiceJSON(t, got))
-		})
-	}
-}
-
-// ppOnALine is the base invoice with PP at 3% on its one line.
-func ppOnALine() *bill.Invoice {
-	inv := scenarioInvoice()
-	inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
-	return inv
-}
-
-func ptr(s string) *string {
-	return &s
-}
-
-// TestConsumptionTaxKeepsOtherAttributes checks that a line whose PP moves
-// keeps its other item attributes.
-func TestConsumptionTaxKeepsOtherAttributes(t *testing.T) {
-	inv := catering()
-	inv.Lines[0].Item.Attributes = []*org.Attribute{{Label: "Volumen", Text: "0,5 l"}}
-	_, doc := exportInvoice(t, inv)
-	data, err := goblubl.Encode(doc)
-	require.NoError(t, err)
-	got := importUBL(t, data).Extract().(*bill.Invoice)
-	assert.Empty(t, got.Charges)
-	assert.Equal(t, []*org.Attribute{{Label: "Volumen", Text: "0,5 l"}}, got.Lines[0].Item.Attributes)
-	assert.Equal(t, "3%", got.Lines[0].Taxes.Get(hr.TaxCategoryPP).Percent.String())
-}
-
-// TestConsumptionTaxMovesBesideOtherFaults checks that the PP of an invoice
-// the addon refuses for another reason moves all the same: only a fault the
-// move would add keeps it a charge.
-func TestConsumptionTaxMovesBesideOtherFaults(t *testing.T) {
-	_, doc := exportInvoice(t, catering())
-	doc.AccountingSupplierParty.SellerContact = nil
-	data, err := goblubl.Encode(doc)
-	require.NoError(t, err)
-	env := importUBL(t, data)
-	assert.Empty(t, env.Extract().(*bill.Invoice).Charges)
-	err = env.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "GOBL-HR-ERACUN-BILL-INVOICE-06")
-}
-
-// TestConsumptionTaxImportTwice checks that importing the same decoded
-// document twice gives the same invoice, with its PP moved both times: the
-// import leaves the UBL document as it was.
-func TestConsumptionTaxImportTwice(t *testing.T) {
+// TestConsumptionTaxImportsAsCharge checks what the import makes of an
+// exported PP: the exempt charge with the HR tax category PP, which an
+// invoice received from another issuer has too.
+func TestConsumptionTaxImportsAsCharge(t *testing.T) {
 	_, doc := exportInvoice(t, catering())
 	data, err := goblubl.Encode(doc)
 	require.NoError(t, err)
 	in, err := goblubl.Decode(data)
 	require.NoError(t, err)
-	first, second := importDoc(t, in), importDoc(t, in)
-	assert.Empty(t, first.Extract().(*bill.Invoice).Charges)
-	assert.Equal(t, invoiceJSON(t, first), invoiceJSON(t, second))
-}
-
-// importUBL imports the UBL data the way a received eRačun is.
-func importUBL(t *testing.T, data []byte) *gobl.Envelope {
-	t.Helper()
-	in, err := goblubl.Decode(data)
-	require.NoError(t, err)
-	return importDoc(t, in)
-}
-
-func importDoc(t *testing.T, in goblubl.Document) *gobl.Envelope {
-	t.Helper()
 	env, err := goblubl.Import(in)
 	require.NoError(t, err)
-	return env
-}
-
-// importUBLAsCharge imports the UBL data without moving PP, as the import
-// did before it read PP back into the hr regime's PP tax.
-func importUBLAsCharge(t *testing.T, data []byte) *gobl.Envelope {
-	t.Helper()
-	in, err := goblubl.Decode(data)
-	require.NoError(t, err)
-	f := hrubl.FormatHRCIUS
-	f.ReconciledImportFuncs = nil
-	env, err := goblubl.Import(in, goblubl.WithFormat(f))
-	require.NoError(t, err)
-	return env
-}
-
-// invoiceJSON is the invoice in the envelope, with a fixed UUID.
-func invoiceJSON(t *testing.T, env *gobl.Envelope) string {
-	t.Helper()
-	inv := *env.Extract().(*bill.Invoice)
-	inv.UUID = staticUUID
-	data, err := json.Marshal(inv)
-	require.NoError(t, err)
-	return string(data)
-}
-
-// ppRoundTrip is what an invoice with PP on its lines must keep through an
-// export and an import.
-type ppRoundTrip struct {
-	// LinePP is the PP percent of each line, or "" for none.
-	LinePP                []string
-	Payable, Tax, VAT, PP string
-	// ExemptNotes are the texts of the exempt VAT notes.
-	ExemptNotes []string
-}
-
-func roundTripped(inv *bill.Invoice) ppRoundTrip {
-	rt := ppRoundTrip{
-		LinePP:  make([]string, len(inv.Lines)),
-		Payable: inv.Totals.Payable.String(),
-		Tax:     inv.Totals.Tax.String(),
-		VAT:     inv.Totals.Taxes.Category(tax.CategoryVAT).Amount.String(),
-		PP:      inv.Totals.Taxes.Category(hr.TaxCategoryPP).Amount.String(),
+	require.NoError(t, env.Validate())
+	inv := env.Extract().(*bill.Invoice)
+	require.Len(t, inv.Charges, 2)
+	for _, c := range inv.Charges {
+		assert.Equal(t, eracun.TaxLabelPP, c.Taxes.Get(tax.CategoryVAT).Ext.Get(eracun.ExtKeyTaxCategory))
 	}
-	for i, l := range inv.Lines {
-		if c := l.Taxes.Get(hr.TaxCategoryPP); c != nil && c.Percent != nil {
-			rt.LinePP[i] = c.Percent.String()
-		}
-	}
-	for _, n := range inv.Tax.Notes {
-		if n.Category == tax.CategoryVAT && n.Key == tax.KeyExempt {
-			rt.ExemptNotes = append(rt.ExemptNotes, n.Text)
-		}
-	}
-	return rt
+	assert.Empty(t, inv.Lines[0].Item.Attributes)
+	assert.Equal(t, "51.58", inv.Totals.Payable.String())
 }
