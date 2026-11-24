@@ -74,11 +74,11 @@ func newAddon() *tax.AddonDef {
 				leaves out the original operator, so the corrective document needs its
 				own.
 
-				A supplier outside the VAT system, such as a small taxpayer, has a tax
-				ID with only the country HR and its OIB as an identity of type OIB,
-				and must not charge VAT. Parties with an OIB, from an OIB identity or
-				a Croatian VAT number, and no ISO 6523 endpoint are given the eRačun
-				network address 9934:<OIB>. An address given with the scheme 9934
+				The supplier gives its OIB as the code of its tax ID, and says in
+				hr-eracun-vat-status whether it is registered for VAT. One that is
+				not, such as a small taxpayer, must not charge VAT. Parties with an
+				OIB, from a Croatian tax ID or an OIB identity, and no ISO 6523
+				endpoint are given the eRačun network address 9934:<OIB>. An address given with the scheme 9934
 				must be a valid OIB, the party's own when it has one. Other ISO 6523
 				schemes, such as a GLN, are accepted, as AMS registers them too.
 

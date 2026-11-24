@@ -192,22 +192,37 @@ func setPassThroughTaxCategory(ts tax.Set, name *string) {
 	}
 }
 
-// importSellerTaxRegistration reads a Croatian seller outside the VAT system,
-// one with a tax registration (BT-32) and no VAT identifier (BT-31), as the
-// party the
-// addons take: a tax ID with only the country HR, which keeps the regime,
-// and its OIB as an identity of type OIB. gobl.ubl reads BT-32 as an identity
-// with the tax scope, and BT-30 as one with the legal scope, and an HR
-// seller's tax registration is its OIB (HR-BR-53). When BT-30 holds the same
-// OIB, the two become one identity with the legal scope; otherwise the OIB
-// keeps the tax scope, so the export writes both back where they were.
+// importSellerTaxRegistration reads the seller's VAT status from where its
+// OIB is written, and its OIB into its tax ID:
+//
+//   - a seller with a VAT identifier (BT-31), which gobl.ubl reads as its tax
+//     ID, is registered for VAT;
+//   - a Croatian seller with a tax registration (BT-32) and no VAT identifier
+//     is not: its tax registration is its OIB (HR-BR-53);
+//   - a Croatian seller with neither, as on an invoice with an amount not
+//     subject to VAT (O), which shows no VAT identifier (BR-O-02), has its
+//     OIB as its legal registration (BT-30). A seller that isn't registered
+//     gives a tax registration, so this one is taken as registered.
+//
+// gobl.ubl reads BT-32 as an identity with the tax scope and BT-30 as one
+// with the legal scope: those that repeat the OIB go, since the export writes
+// both back from the tax ID.
 func importSellerTaxRegistration(in *goblubl.Invoice, inv *bill.Invoice) {
 	sup := inv.Supplier
 	p := in.AccountingSupplierParty.Party
-	if sup == nil || p == nil || sup.TaxID != nil || !croatianAddress(p) {
+	if sup == nil || p == nil {
 		return
 	}
-	oib := cbc.CodeEmpty
+	if sup.TaxID != nil {
+		if sup.TaxID.Country == l10n.HR.Tax() && sup.TaxID.Code != cbc.CodeEmpty {
+			sup.Ext = sup.Ext.Set(eracun.ExtKeyVATStatus, eracun.VATStatusRegistered)
+		}
+		return
+	}
+	if !croatianAddress(p) {
+		return
+	}
+	oib, status := cbc.CodeEmpty, eracun.VATStatusNotRegistered
 	for _, pts := range p.PartyTaxScheme {
 		if pts.TaxScheme == nil || pts.CompanyID == nil {
 			continue
@@ -220,27 +235,19 @@ func importSellerTaxRegistration(in *goblubl.Invoice, inv *bill.Invoice) {
 		}
 	}
 	if oib == cbc.CodeEmpty {
-		return
-	}
-	sup.TaxID = &tax.Identity{Country: l10n.HR.Tax()}
-	isOIB := func(id *org.Identity) bool {
-		return id != nil && eracun.NormalizeOIB(id.Code.String()) == oib
-	}
-	sup.Identities = slices.DeleteFunc(sup.Identities, func(id *org.Identity) bool {
-		return isOIB(id) && id.Scope == org.IdentityScopeTax && id.Type == cbc.CodeEmpty
-	})
-	scope := org.IdentityScopeLegal
-	for _, id := range sup.Identities {
-		if id == nil || !id.Scope.Has(org.IdentityScopeLegal) {
-			continue
+		if le := p.PartyLegalEntity; le != nil && le.CompanyID != nil {
+			oib, status = eracun.NormalizeOIB(le.CompanyID.Value), eracun.VATStatusRegistered
 		}
-		if isOIB(id) && id.Type == cbc.CodeEmpty {
-			id.Type = hr.IdentityTypeOIB
+		if !eracun.ValidOIB(oib) {
 			return
 		}
-		scope = org.IdentityScopeTax
 	}
-	sup.Identities = append(sup.Identities, &org.Identity{Type: hr.IdentityTypeOIB, Scope: scope, Code: oib})
+	sup.TaxID = &tax.Identity{Country: l10n.HR.Tax(), Code: oib}
+	sup.Ext = sup.Ext.Set(eracun.ExtKeyVATStatus, status)
+	sup.Identities = slices.DeleteFunc(sup.Identities, func(id *org.Identity) bool {
+		return id != nil && id.Type == cbc.CodeEmpty && eracun.NormalizeOIB(id.Code.String()) == oib &&
+			(id.Scope == org.IdentityScopeTax || id.Scope == org.IdentityScopeLegal)
+	})
 }
 
 // croatianAddress says whether the party's postal address is in Croatia.

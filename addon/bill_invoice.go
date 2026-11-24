@@ -88,7 +88,6 @@ func normalizeInvoice(inv *bill.Invoice) {
 	}
 	normalizeIssueTime(inv)
 	normalizeRounding(inv)
-	assignOIBScope(inv.Supplier)
 	normalizePartyEndpoint(inv.Supplier)
 	normalizePartyEndpoint(inv.Customer)
 }
@@ -128,7 +127,7 @@ func normalizeIssueTime(inv *bill.Invoice) {
 // normalizePartyEndpoint gives a party with an OIB its eRačun network
 // address, 9934:<OIB>, unless it already has an ISO 6523 address: an
 // endpoint, or an inbox with a scheme, which the export writes otherwise.
-// The OIB is the party's Croatian VAT number or its OIB identity.
+// The OIB is the code of the party's Croatian tax ID or its OIB identity.
 func normalizePartyEndpoint(p *org.Party) {
 	if p == nil || p.Endpoint(iso.ActorIDScheme) != nil || hasSchemeInbox(p) {
 		return
@@ -176,17 +175,26 @@ func billInvoiceRules() *rules.Set {
 			),
 		),
 		rules.Field("supplier",
-			rules.Assert("05", "invoice supplier requires an eRačun address registered in AMS: an OIB, from a Croatian VAT number or an OIB identity, or an ISO 6523 endpoint, not an email (HR-BR-7)",
+			rules.Assert("05", "invoice supplier requires an eRačun address registered in AMS: an OIB, from its Croatian tax ID or an OIB identity, or an ISO 6523 endpoint, not an email (HR-BR-7)",
 				is.Func("has endpoint", partyHasEndpoint),
 			),
 			rules.Assert("18", "invoice supplier eRačun address with scheme 9934 must be a valid OIB (HR-BR-7)",
 				is.Func("9934 address is an OIB", partyOIBAddressValid),
 			),
-			rules.Assert("19", "invoice supplier eRačun address must be the supplier's own OIB, the one in its Croatian VAT number or OIB identity (HR-BR-7)",
+			rules.Assert("19", "invoice supplier eRačun address must be the supplier's own OIB, the one in its Croatian tax ID or OIB identity (HR-BR-7)",
 				is.Func("address matches OIB", partyAddressMatchesOIB),
 			),
-			rules.Assert("17", "invoice supplier OIB identity must be the OIB in its Croatian VAT number (supplier tax ID code)",
-				is.Func("VAT number matches OIB identity", vatNumberMatchesOIBIdentity),
+			rules.Assert("17", "invoice supplier OIB identity must be the OIB in its tax ID code",
+				is.Func("tax ID matches OIB identity", vatNumberMatchesOIBIdentity),
+			),
+			rules.Assert("15", "invoice supplier tax ID code is required: its OIB, whether or not it is registered for VAT",
+				is.Func("has tax ID code", partyHasTaxIDCode),
+			),
+			rules.Field("ext",
+				rules.Assert("14", "invoice supplier ext hr-eracun-vat-status is required: registered when the supplier is registered for VAT, not-registered when it is not, such as a small taxpayer",
+					tax.ExtensionsRequire(ExtKeyVATStatus),
+					tax.ExtensionHasValidCode(ExtKeyVATStatus),
+				),
 			),
 			rules.Field("people",
 				rules.Assert("06", "invoice supplier requires exactly one person with the operator key, the person who issued the invoice (HR-BR-9, HR-BR-37)",
@@ -236,19 +244,14 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
-		// GOBL writes a tax ID code as the party's VAT identifier, which an
-		// invoice with an O (not subject to VAT) amount must not have.
+		// An invoice with an O (not subject to VAT) amount shows no VAT
+		// identifier (BR-O-02). The export leaves the supplier's out; GOBL
+		// writes a customer's tax ID code as its VAT identifier, so the
+		// customer gives its OIB another way.
 		rules.When(is.Func("has O taxes", invoiceHasOutsideScope),
 			rules.Field("totals",
 				rules.Assert("32", "invoice with O taxes must not charge PP: the eRačun states PP as an exempt amount, which EN 16931 doesn't allow beside O (BR-O-11)",
 					is.Func("charges no PP", totalsChargeNoConsumptionTax),
-				),
-			),
-			rules.Field("supplier",
-				rules.Field("tax_id",
-					rules.Field("code",
-						rules.Assert("15", "invoice supplier tax ID code must be empty for O taxes (BR-O-02 to BR-O-04)", is.Empty),
-					),
 				),
 			),
 			rules.Field("customer",
@@ -259,26 +262,17 @@ func billInvoiceRules() *rules.Set {
 				),
 			),
 		),
-		// A supplier with a tax ID with only the country HR has no VAT number:
-		// it is outside the VAT system. The HR schematron accepts its tax
-		// registration (BT-32) wherever a seller tax ID is required, so these
-		// rules are the only check that it charges no VAT and that the export
-		// has its OIB to write there.
-		rules.When(is.Func("supplier outside the VAT system", supplierOutsideVAT),
+		// The HR schematron accepts a supplier's tax registration (BT-32)
+		// wherever a seller tax ID is required, so this rule is the only
+		// check that a supplier not registered for VAT charges none.
+		rules.When(is.Func("supplier not registered for VAT", supplierNotRegisteredForVAT),
 			rules.Field("totals",
-				rules.Assert("13", "invoice from a supplier with no VAT number (supplier tax ID code), outside the VAT system, must not charge VAT (Art. 90.g of the VAT Act)",
+				rules.Assert("13", "invoice from a supplier not registered for VAT (supplier ext hr-eracun-vat-status) must not charge VAT (Art. 90.g of the VAT Act)",
 					is.Func("charges no VAT", totalsChargeNoVAT),
 				),
 				// How such a supplier states PP in an eRačun is not settled yet.
-				rules.Assert("31", "invoice from a supplier with no VAT number (supplier tax ID code) can't charge PP in an eRačun yet",
+				rules.Assert("31", "invoice from a supplier not registered for VAT (supplier ext hr-eracun-vat-status) can't charge PP in an eRačun yet",
 					is.Func("charges no PP", totalsChargeNoConsumptionTax),
-				),
-			),
-			rules.Field("supplier",
-				rules.Field("identities",
-					rules.Assert("14", "invoice supplier with no VAT number requires an identity of type OIB: its legal and tax registration (BT-30, BT-32)",
-						is.Func("has OIB", identitiesHaveOIB),
-					),
 				),
 			),
 		),

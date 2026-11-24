@@ -4,7 +4,7 @@
 		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
 		"dig": {
 			"alg": "sha256",
-			"val": "704cf1d9b2f6e7a802c5127901e8646b8a1b11d3238b18cc23145f5760ace5ca"
+			"val": "404ad7bd6b05293c8cadc12e09bd16d3e681813d15a194d3075f74f8e7dd5bfc"
 		},
 		"from": "iso6523-actorid-upis::9934:12345678903",
 		"to": "iso6523-actorid-upis::9934:11111111119"
@@ -62,7 +62,10 @@
 					"code": "10000",
 					"country": "HR"
 				}
-			]
+			],
+			"ext": {
+				"hr-eracun-vat-status": "registered"
+			}
 		},
 		"customer": {
 			"name": "Tvrtka B d.o.o.",

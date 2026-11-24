@@ -1,4 +1,5 @@
 {
+	"$regime": "HR",
 	"$addons": [
 		"eu-en16931-v2017",
 		"hr-eracun-v1"
@@ -28,12 +29,10 @@
 	},
 	"supplier": {
 		"name": "TVRTKA A d.o.o.",
-		"identities": [
-			{
-				"scope": "legal",
-				"code": "12345678903"
-			}
-		],
+		"tax_id": {
+			"country": "HR",
+			"code": "12345678903"
+		},
 		"people": [
 			{
 				"key": "operator",
@@ -64,6 +63,9 @@
 		],
 		"registration": {
 			"other": "Osnovano na trgovačkom sudu, temeljni kapital"
+		},
+		"ext": {
+			"hr-eracun-vat-status": "registered"
 		}
 	},
 	"customer": {

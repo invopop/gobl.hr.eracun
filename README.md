@@ -72,6 +72,7 @@ from gobl.ubl, or `convert.Import`/`convert.Export`.
 | --- | --- |
 | `hr-eracun-process` | Business process (BT-23), written to the UBL `ProfileID`: `P1` to `P12`, or `P99:` followed by a label agreed with the buyer. |
 | `hr-eracun-tax-category` | HR tax category of a tax combo (HR-TB-2): `PDV25`, `PDV13`, `PDV5`, `Z`, `K`, `G`, `AE`, `E`, `POVNAK`, `PP`, `PPMV`, `O` or `N`. Set from the tax key and rate, except for amounts collected for a third party (`POVNAK`, `PP`, `PPMV`) and any other non-taxable fee charged with taxable items (`N`), which are set on an exempt combo. An issuer charges the consumption tax with the regime's `PP` tax instead (see [Consumption tax (PP)](#consumption-tax-pp)); the label `PP` is how a received eRačun carries it. |
+| `hr-eracun-vat-status` | Whether the supplier is registered for VAT: `registered` or `not-registered`. Required on the supplier of every invoice (see [Supplier](#supplier)). |
 | `hr-eracun-rejection-reason` | Kind of reason for rejecting an invoice (AR-BT-12): `N`, `U` or `O`, the same code the buyer reports to the Tax Administration. |
 
 The `hr` regime's invoice tag `cash-basis` marks VAT accounted for when the
@@ -131,7 +132,7 @@ a line to the charge.
 
 The export can't write PP that has no base in the lines, so PP on a document
 level discount or charge is rejected: discount or charge the lines instead. A
-line with PP needs a VAT combo too, and a supplier outside the VAT system
+line with PP needs a VAT combo too, and a supplier not registered for VAT
 can't charge PP yet. Nor can an invoice with amounts not subject to VAT (O):
 EN 16931 allows no exempt amount beside them (BR-O-11). An invoice with the PP
 tax on its lines can't also have a line, charge or discount with the label
@@ -149,29 +150,40 @@ Limits:
 
 ## Supplier
 
-A supplier in the VAT system gives its Croatian VAT number in `tax_id`, and
-the export writes it as the seller's VAT identifier (BT-31), `HR<OIB>`. A
-supplier outside the VAT system, such as a small taxpayer, has no VAT number:
-its `tax_id` has only the country, which keeps the regime, and its OIB goes in
-an `OIB` identity:
+Every Croatian business has an OIB, whether or not it is registered for VAT,
+and a Croatian VAT number is `HR` followed by the OIB. So the supplier always
+gives its OIB as the code of its `tax_id`, and says whether it is registered
+for VAT in the extension `hr-eracun-vat-status`:
 
 ```yaml
 supplier:
   tax_id:
     country: "HR"
-  identities:
-    - type: OIB
-      code: "12345678903"
+    code: "12345678903"
+  ext:
+    hr-eracun-vat-status: "not-registered"
 ```
 
-The export writes that OIB as the seller's legal registration (BT-30), as its
-tax registration (BT-32) with the scheme `FRE`, and as its eRačun address
-`9934:<OIB>`, as in the official example "eRacun-Nije u sustavu PDV". An `OIB`
-identity with no scope gets the legal scope, unless another identity already
-has it. The invoice must not charge VAT, and its S, Z, E and AE taxes need the
-`OIB` identity. Importing an eRačun with a BT-32 and no BT-31 gives the same
-supplier. The `hr-fiskal-b2c-v1` addon takes the same party, and gobl.fr.ctc
-models a French supplier the same way, with a SIREN identity.
+| Value | The supplier | The export writes its OIB as |
+| --- | --- | --- |
+| `registered` | is registered for VAT | its VAT identifier (BT-31), `HR<OIB>` |
+| `not-registered` | is not, such as a small taxpayer | its tax registration (BT-32) with the scheme `FRE` and its legal registration (BT-30), as in the official example "eRacun-Nije u sustavu PDV" |
+
+An invoice without the extension, or whose supplier `tax_id` has no code, is
+rejected. A supplier that is not registered must not charge VAT. An invoice
+with an amount not subject to VAT (O) shows no VAT identifier (BR-O-02), so
+on one the export leaves out a registered supplier's VAT identifier and
+writes its OIB as its legal registration alone, as in the official example
+"Neoporezivi racun".
+
+Importing an eRačun reads the status from where the seller's OIB is written:
+a VAT identifier means registered, and a tax registration without one means
+not registered. A seller with neither, as on an invoice not subject to VAT,
+has its OIB read from its legal registration and is taken as registered,
+since a seller that isn't gives a tax registration.
+
+The `hr-fiskal-b2c-v1` addon takes the same party, with its own extension
+`hr-fiskal-vat-status`.
 
 ## eRačun addresses and buyers
 

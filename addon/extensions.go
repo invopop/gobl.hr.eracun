@@ -20,6 +20,24 @@ const (
 	// for (AR-BT-12), the same code the buyer reports to the Tax
 	// Administration.
 	ExtKeyRejectionReason cbc.Key = "hr-eracun-rejection-reason"
+
+	// ExtKeyVATStatus says whether the supplier is registered for VAT. Its
+	// tax ID can't: every Croatian business has an OIB, and a Croatian VAT
+	// number is HR followed by the OIB.
+	//
+	// The hr-fiskal-b2c-v1 addon has the same extension under its own key.
+	// When both addons agree on it, it moves to the hr regime.
+	ExtKeyVATStatus cbc.Key = "hr-eracun-vat-status"
+)
+
+// Whether the supplier is registered for VAT (ExtKeyVATStatus)
+const (
+	// VATStatusRegistered marks a supplier registered for VAT, whose OIB is
+	// written as its VAT identifier (BT-31).
+	VATStatusRegistered cbc.Code = "registered"
+	// VATStatusNotRegistered marks a supplier not registered for VAT, such as
+	// a small taxpayer, whose OIB is written as its tax registration (BT-32).
+	VATStatusNotRegistered cbc.Code = "not-registered"
 )
 
 // HR VAT category labels (HR-TB-2, "HR oznaka kategorije PDV-a"), the codes of
@@ -104,6 +122,24 @@ var extensions = []*cbc.Definition{
 			{Code: TaxLabelPPMV, Name: i18n.String{i18n.EN: "Special tax on motor vehicles", i18n.HR: "Posebni porez na motorna vozila"}},
 			{Code: TaxLabelO, Name: i18n.String{i18n.EN: "Not subject to VAT", i18n.HR: "Neoporezivo"}},
 			{Code: TaxLabelN, Name: i18n.String{i18n.EN: "Non-taxable fee", i18n.HR: "Neoporeziva naknada"}},
+		},
+	}, {
+		Key: ExtKeyVATStatus,
+		Name: i18n.String{
+			i18n.EN: "VAT Status",
+			i18n.HR: "Status u sustavu PDV-a",
+		},
+		Desc: i18n.String{
+			i18n.EN: here.Doc(`
+				Whether the supplier is registered for VAT. Every invoice says it
+				on its supplier, since the supplier's tax ID holds its OIB either
+				way. A supplier that is not registered, such as a small taxpayer,
+				charges no VAT.
+			`),
+		},
+		Values: []*cbc.Definition{
+			{Code: VATStatusRegistered, Name: i18n.String{i18n.EN: "Registered for VAT", i18n.HR: "U sustavu PDV-a"}},
+			{Code: VATStatusNotRegistered, Name: i18n.String{i18n.EN: "Not registered for VAT", i18n.HR: "Nije u sustavu PDV-a"}},
 		},
 	}, {
 		Key: ExtKeyRejectionReason,

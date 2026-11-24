@@ -19,6 +19,8 @@ supplier:
   tax_id:
     country: "HR"
     code: "12345678903"
+  ext:
+    hr-eracun-vat-status: "registered"
   people:
     - key: operator
       name:

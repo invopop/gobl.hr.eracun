@@ -36,6 +36,7 @@ func testInvoice() *bill.Invoice {
 		Supplier: &org.Party{
 			Name:  "TVRTKA A d.o.o.",
 			TaxID: &tax.Identity{Country: "HR", Code: "12345678903"},
+			Ext:   tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: eracun.VATStatusRegistered}),
 			Addresses: []*org.Address{
 				{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"},
 			},
@@ -202,19 +203,24 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
 			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
-		{"supplier VAT number with an O line", func(inv *bill.Invoice) {
-			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+		{"supplier without a VAT status", func(inv *bill.Invoice) {
+			inv.Supplier.Ext = tax.Extensions{}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-14"},
+		{"supplier with an unknown VAT status", func(inv *bill.Invoice) {
+			inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: "exempt"})
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-14"},
+		{"supplier tax ID without its OIB", func(inv *bill.Invoice) {
+			inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
+			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
+		{"supplier without a tax ID", func(inv *bill.Invoice) {
+			inv.Supplier.TaxID = nil
+			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
 		{"customer VAT number with an O line", func(inv *bill.Invoice) {
 			outsideVAT(inv)
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-16"},
-		{"supplier VAT number with an O charge", func(inv *bill.Invoice) {
-			inv.Charges = []*bill.Charge{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
-		{"supplier VAT number with an O discount", func(inv *bill.Invoice) {
-			inv.Discounts = []*bill.Discount{{Amount: num.MakeAmount(500, 2), Taxes: tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
 		{"line without KPD", func(inv *bill.Invoice) { inv.Lines[0].Item.Identities = nil }, "GOBL-HR-ERACUN-BILL-INVOICE-12"},
 		{"KPD without dots", func(inv *bill.Invoice) {
 			inv.Lines[0].Item.Identities = []*org.Identity{{Label: eracun.IdentityLabelKPD, Code: "622020"}}
@@ -244,7 +250,7 @@ func TestInvoiceRules(t *testing.T) {
 		{"pass-through category on a standard combo", func(inv *bill.Invoice) {
 			inv.Lines[0].Taxes[0].Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyTaxCategory: eracun.TaxLabelPP})
 		}, "GOBL-HR-ERACUN-TAX-COMBO-02"},
-		{"VAT from a supplier with no VAT number", func(inv *bill.Invoice) {
+		{"VAT from a supplier not registered for VAT", func(inv *bill.Invoice) {
 			outsideVAT(inv)
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-13"},
@@ -310,15 +316,10 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}, consumptionTax(num.MakePercentage(3, 2))}
 			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope, Text: "Nije predmet oporezivanja"}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-32"},
-		{"PP from a supplier with no VAT number", func(inv *bill.Invoice) {
+		{"PP from a supplier not registered for VAT", func(inv *bill.Invoice) {
 			outsideVAT(inv)
 			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-31"},
-		{"supplier with no VAT number and no OIB identity", func(inv *bill.Invoice) {
-			outsideVAT(inv)
-			inv.Supplier.Identities = nil
-			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::0088:3850001234567"}}
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-14"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -834,12 +835,11 @@ func TestCorrectionIssueTime(t *testing.T) {
 	})
 }
 
-// outsideVAT makes the supplier one outside the VAT system, a small
-// taxpayer: a tax ID with only the country HR, its OIB as an identity, and
-// an exempt line. The hr-fiskal-b2c-v1 addon takes the same party.
+// outsideVAT makes the supplier one not registered for VAT, a small
+// taxpayer: its OIB stays in its tax ID, its VAT status says so, and its
+// line is exempt. The hr-fiskal-b2c-v1 addon takes the same party.
 func outsideVAT(inv *bill.Invoice) {
-	inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
-	inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+	inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: eracun.VATStatusNotRegistered})
 	inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
 	inv.Tax.Notes = []*tax.Note{{
 		Category: tax.CategoryVAT,
@@ -848,16 +848,15 @@ func outsideVAT(inv *bill.Invoice) {
 	}}
 }
 
-func TestSupplierOutsideVAT(t *testing.T) {
+func TestSupplierNotRegisteredForVAT(t *testing.T) {
 	inv := testInvoice()
 	outsideVAT(inv)
 	require.NoError(t, inv.Calculate())
 	require.NoError(t, rules.Validate(inv))
-	assert.Equal(t, l10n.TaxCountryCode("HR"), inv.GetRegime(), "a tax ID with only the country keeps the regime")
-	assert.False(t, eracun.PartyHasVATNumber(inv.Supplier))
+	assert.True(t, eracun.NotRegisteredForVAT(inv.Supplier))
+	assert.False(t, eracun.RegisteredForVAT(inv.Supplier))
 	assert.Equal(t, cbc.Code("12345678903"), eracun.PartyOIB(inv.Supplier))
-	require.Len(t, inv.Supplier.Identities, 1)
-	assert.Equal(t, org.IdentityScopeLegal, inv.Supplier.Identities[0].Scope, "the OIB is the legal registration (BT-30)")
+	assert.Empty(t, inv.Supplier.Identities, "the OIB stays in the tax ID")
 	require.Len(t, inv.Supplier.Endpoints, 1)
 	assert.Equal(t, cbc.URI("iso6523-actorid-upis::9934:12345678903"), inv.Supplier.Endpoints[0].URI)
 }
@@ -880,51 +879,27 @@ func TestOutsideScopeWithoutVATNumbers(t *testing.T) {
 	require.NoError(t, rules.Validate(inv))
 }
 
-// TestSupplierInVATGetsNoOIBIdentity checks that the OIB of a VAT-registered
-// supplier stays in its VAT number: an OIB identity would add a legal
-// registration (BT-30) that none of the official examples have.
-func TestSupplierInVATGetsNoOIBIdentity(t *testing.T) {
+// TestOutsideScopeFromRegisteredSupplier checks that a supplier registered
+// for VAT may issue an invoice with an O amount: the export leaves its VAT
+// identifier out (BR-O-02), so the supplier doesn't have to.
+func TestOutsideScopeFromRegisteredSupplier(t *testing.T) {
+	inv := testInvoice()
+	inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}
+	inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope, Text: "Neoporezivo"}}
+	inv.Customer.TaxID = nil
+	inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+}
+
+// TestSupplierKeepsOIBInTaxID checks that the supplier's OIB is read from
+// its tax ID and no identity is added for it.
+func TestSupplierKeepsOIBInTaxID(t *testing.T) {
 	inv := testInvoice()
 	require.NoError(t, inv.Calculate())
 	assert.Empty(t, inv.Supplier.Identities)
-	assert.True(t, eracun.PartyHasVATNumber(inv.Supplier))
+	assert.True(t, eracun.RegisteredForVAT(inv.Supplier))
 	assert.Equal(t, cbc.Code("12345678903"), eracun.PartyOIB(inv.Supplier))
-}
-
-// TestOIBTaxScopeBesideALegalIdentity checks that the OIB identity gets the
-// tax scope when another identity has the legal one.
-func TestOIBTaxScopeBesideALegalIdentity(t *testing.T) {
-	inv := testInvoice()
-	outsideVAT(inv)
-	inv.Supplier.Identities = append(inv.Supplier.Identities, &org.Identity{Scope: org.IdentityScopeLegal, Code: "080000001"})
-	require.NoError(t, inv.Calculate())
-	require.NoError(t, rules.Validate(inv))
-	oib := org.IdentityForType(inv.Supplier.Identities, hr.IdentityTypeOIB)
-	require.NotNil(t, oib)
-	assert.Equal(t, org.IdentityScopeTax, oib.Scope)
-}
-
-// TestSupplierInVATKeepsOIBScope checks that the OIB identity of a
-// VAT-registered supplier keeps the scope it was given.
-func TestSupplierInVATKeepsOIBScope(t *testing.T) {
-	inv := testInvoice()
-	inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
-	require.NoError(t, inv.Calculate())
-	assert.Empty(t, inv.Supplier.Identities[0].Scope)
-}
-
-// TestSupplierWithoutTaxIDNotOutsideVAT checks that a supplier with no tax
-// ID at all is not taken for one outside the VAT system.
-func TestSupplierWithoutTaxIDNotOutsideVAT(t *testing.T) {
-	inv := testInvoice()
-	inv.Supplier.TaxID = nil
-	inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
-	require.NoError(t, inv.Calculate())
-	faults := rules.Validate(inv)
-	if faults != nil {
-		assert.False(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-13"), "got %s", faults)
-		assert.False(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-14"), "got %s", faults)
-	}
 }
 
 // TestEndpointNotDerivedBesideSchemeInbox checks that an OIB doesn't replace

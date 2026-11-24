@@ -11,37 +11,49 @@ import (
 	"github.com/invopop/gobl/tax"
 )
 
-// A supplier in the VAT system has a tax ID with its Croatian VAT number,
-// HR followed by its OIB, which the export writes as the seller's VAT
-// identifier (BT-31). A supplier outside the VAT system, such as a small
-// taxpayer, has no VAT number: its tax ID has only the country HR, which
-// keeps the regime, and its OIB is an identity of type OIB. The export writes
-// that identity as the seller's legal registration (BT-30) and as its tax
-// registration (BT-32) with the scheme FRE.
+// Every Croatian business has an OIB, whether or not it is registered for
+// VAT, and a Croatian VAT number is HR followed by the OIB. So the supplier's
+// tax ID always holds its OIB and can't say whether it is registered for VAT:
+// the supplier says it in ExtKeyVATStatus. Invoices are also numbered per
+// supplier tax ID, which a tax ID with only the country would not tell apart.
 //
-// gobl.fr.ctc models a French supplier the same way, with a SIREN identity
-// and no VAT status flag, and the hr-fiskal-b2c-v1 addon takes the same
-// party, so one supplier serves both Croatian addons.
+// The UBL export writes the OIB of a supplier registered for VAT as its VAT
+// identifier (BT-31), and the OIB of one that is not as its tax registration
+// (BT-32) with the scheme FRE. The hr-fiskal-b2c-v1 addon takes the same
+// party, with its own extension key.
 
-// PartyHasVATNumber says whether the party's tax ID has a VAT number. A
-// Croatian supplier without one is outside the VAT system.
-func PartyHasVATNumber(p *org.Party) bool {
-	return p != nil && p.TaxID != nil && p.TaxID.Code != cbc.CodeEmpty
+// RegisteredForVAT says whether the supplier states that it is registered
+// for VAT (ExtKeyVATStatus).
+func RegisteredForVAT(p *org.Party) bool {
+	return p != nil && p.Ext.Get(ExtKeyVATStatus) == VATStatusRegistered
 }
 
-// PartyOIB provides the OIB of a party: the code of its Croatian VAT number,
-// or else the code of its OIB identity. It is empty when the party has
-// neither.
-func PartyOIB(p *org.Party) cbc.Code {
-	if p == nil {
+// NotRegisteredForVAT says whether the supplier states that it is not
+// registered for VAT (ExtKeyVATStatus), as a small taxpayer does.
+func NotRegisteredForVAT(p *org.Party) bool {
+	return p != nil && p.Ext.Get(ExtKeyVATStatus) == VATStatusNotRegistered
+}
+
+// taxIDOIB provides the OIB in a party's Croatian tax ID, empty when it has
+// none.
+func taxIDOIB(p *org.Party) cbc.Code {
+	if p == nil || p.TaxID == nil || p.TaxID.Country != l10n.HR.Tax() {
 		return cbc.CodeEmpty
 	}
-	if p.TaxID != nil && p.TaxID.Country == l10n.HR.Tax() {
-		tID := *p.TaxID
-		tax.NormalizeIdentity(&tID)
-		if tID.Code != cbc.CodeEmpty {
-			return tID.Code
-		}
+	tID := *p.TaxID
+	tax.NormalizeIdentity(&tID)
+	return tID.Code
+}
+
+// PartyOIB provides the OIB of a party: the code of its Croatian tax ID, or
+// else the code of its OIB identity, as a customer may give it. It is empty
+// when the party has neither.
+func PartyOIB(p *org.Party) cbc.Code {
+	if oib := taxIDOIB(p); oib != cbc.CodeEmpty {
+		return oib
+	}
+	if p == nil {
+		return cbc.CodeEmpty
 	}
 	if id := org.IdentityForType(p.Identities, hr.IdentityTypeOIB); id != nil {
 		return NormalizeOIB(id.Code.String())
@@ -54,6 +66,11 @@ func PartyOIB(p *org.Party) cbc.Code {
 func NormalizeOIB(code string) cbc.Code {
 	c := cbc.NormalizeAlphanumericalCode(cbc.Code(code))
 	return cbc.Code(strings.TrimPrefix(c.String(), l10n.HR.String()))
+}
+
+// ValidOIB checks an OIB, as validOIB does.
+func ValidOIB(code cbc.Code) bool {
+	return validOIB(code.String())
 }
 
 // validOIB checks an OIB: 11 digits, the last of them the ISO 7064 MOD 11,10
@@ -84,53 +101,27 @@ func validOIB(code string) bool {
 	return check == int(code[10]-'0')
 }
 
-// partyOutsideVAT says whether the party is a Croatian supplier outside the
-// VAT system: a tax ID with only the country HR. A party with no tax ID
-// says nothing about it.
-func partyOutsideVAT(p *org.Party) bool {
-	return p != nil && p.TaxID != nil && p.TaxID.Country == l10n.HR.Tax() && p.TaxID.Code == cbc.CodeEmpty
-}
-
-// assignOIBScope gives an unscoped OIB identity of a supplier outside the VAT
-// system the scope the export needs. With the legal scope, the export writes
-// the OIB as the legal registration (BT-30), which BR-CO-26 needs from a
-// seller with no VAT identifier (BT-31), and as the tax registration (BT-32).
-// gobl.fr.ctc gives a SIREN the legal scope the same way. When another
-// identity already has the legal scope, the OIB takes the tax scope and goes
-// only to BT-32: with no scope it would be written as a party identification
-// with the scheme "OIB", which is not an ISO 6523 code.
-func assignOIBScope(p *org.Party) {
-	if !partyOutsideVAT(p) {
-		return
-	}
-	id := org.IdentityForType(p.Identities, hr.IdentityTypeOIB)
-	if id == nil || id.Scope != cbc.KeyEmpty {
-		return
-	}
-	id.Scope = org.IdentityScopeLegal
-	for _, other := range p.Identities {
-		if other != nil && other != id && other.Scope.Has(org.IdentityScopeLegal) {
-			id.Scope = org.IdentityScopeTax
-			return
-		}
-	}
-}
-
-// vatNumberMatchesOIBIdentity checks that a party with both a VAT number and
-// an OIB identity carries the same OIB in each: when they differ, one of them
-// is a typo. A party with only one of them passes.
+// vatNumberMatchesOIBIdentity checks that a party with an OIB in its tax ID
+// and an OIB identity carries the same OIB in each: when they differ, one of
+// them is a typo. A party with only one of them passes.
 func vatNumberMatchesOIBIdentity(val any) bool {
 	p, ok := val.(*org.Party)
-	if !ok || !PartyHasVATNumber(p) {
+	if !ok || taxIDOIB(p) == cbc.CodeEmpty {
 		return true
 	}
 	id := org.IdentityForType(p.Identities, hr.IdentityTypeOIB)
-	return id == nil || NormalizeOIB(id.Code.String()) == PartyOIB(p)
+	return id == nil || NormalizeOIB(id.Code.String()) == taxIDOIB(p)
 }
 
-func supplierOutsideVAT(val any) bool {
+// partyHasTaxIDCode checks that the party's tax ID has a code.
+func partyHasTaxIDCode(val any) bool {
+	p, ok := val.(*org.Party)
+	return !ok || p == nil || (p.TaxID != nil && p.TaxID.Code != cbc.CodeEmpty)
+}
+
+func supplierNotRegisteredForVAT(val any) bool {
 	inv, ok := val.(*bill.Invoice)
-	return ok && inv != nil && partyOutsideVAT(inv.Supplier)
+	return ok && inv != nil && NotRegisteredForVAT(inv.Supplier)
 }
 
 // totalsChargeNoVAT is true when no VAT rate in the totals has a percentage

@@ -30,15 +30,9 @@
 	"supplier": {
 		"name": "TVRTKA A d.o.o.",
 		"tax_id": {
-			"country": "HR"
+			"country": "HR",
+			"code": "12345678903"
 		},
-		"identities": [
-			{
-				"scope": "legal",
-				"type": "OIB",
-				"code": "12345678903"
-			}
-		],
 		"people": [
 			{
 				"key": "operator",
@@ -69,6 +63,9 @@
 		],
 		"registration": {
 			"other": "Osnovano na trgovačkom sudu, temeljni kapital"
+		},
+		"ext": {
+			"hr-eracun-vat-status": "not-registered"
 		}
 	},
 	"customer": {

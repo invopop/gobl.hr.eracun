@@ -47,6 +47,7 @@ func testInvoice() *bill.Invoice {
 		Supplier: &org.Party{
 			Name:  "TVRTKA A d.o.o.",
 			TaxID: &tax.Identity{Country: "HR", Code: "12345678903"},
+			Ext:   tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: eracun.VATStatusRegistered}),
 			Addresses: []*org.Address{
 				{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"},
 			},
@@ -599,13 +600,12 @@ func TestImportRefusesUnpairedLines(t *testing.T) {
 	assert.Contains(t, err.Error(), "2 in UBL and 1 in GOBL")
 }
 
-// outsideVATInvoice is testInvoice from a supplier outside the VAT system: a
-// tax ID with only the country HR, its OIB as an identity, and no VAT.
+// outsideVATInvoice is testInvoice from a supplier not registered for VAT:
+// its OIB in its tax ID, its VAT status saying so, and no VAT.
 func outsideVATInvoice() *bill.Invoice {
 	inv := testInvoice()
 	inv.Tags = tax.Tags{}
-	inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
-	inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+	inv.Supplier.Ext = tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: eracun.VATStatusNotRegistered})
 	for _, l := range inv.Lines {
 		l.Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
 	}
@@ -656,25 +656,36 @@ func importExample(t *testing.T, name string, edit func(*goblubl.Invoice)) *bill
 }
 
 // TestImportSellerOutsideVAT checks that a seller outside the VAT system
-// comes in as the party the addons take: a tax ID with only the country HR,
-// which keeps the regime, and one OIB identity in place of BT-30 and BT-32.
+// comes in as the party the addon takes: its OIB in its tax ID, read from
+// its tax registration (BT-32), and its VAT status saying it isn't
+// registered. The legal registration (BT-30) that repeats the OIB adds no
+// identity.
 func TestImportSellerOutsideVAT(t *testing.T) {
 	inv := importExample(t, "eRacun-Nije u sustavu PDV", nil)
 	assert.Equal(t, "HR", inv.GetRegime().String())
-	assert.Equal(t, &tax.Identity{Country: "HR"}, inv.Supplier.TaxID)
-	assert.Equal(t, []*org.Identity{{Type: hr.IdentityTypeOIB, Scope: org.IdentityScopeLegal, Code: "12345678903"}}, inv.Supplier.Identities)
+	assert.Equal(t, &tax.Identity{Country: "HR", Code: "12345678903"}, inv.Supplier.TaxID)
+	assert.True(t, eracun.NotRegisteredForVAT(inv.Supplier))
+	assert.Empty(t, inv.Supplier.Identities)
+}
+
+// TestImportSellerRegisteredForVAT checks that a seller with a VAT
+// identifier (BT-31) comes in as registered for VAT.
+func TestImportSellerRegisteredForVAT(t *testing.T) {
+	inv := importExample(t, "eRacun-PDV25", nil)
+	assert.Equal(t, &tax.Identity{Country: "HR", Code: "12345678903"}, inv.Supplier.TaxID)
+	assert.True(t, eracun.RegisteredForVAT(inv.Supplier))
 }
 
 // TestImportSellerTaxRegistrationBesideLegalID checks a seller whose legal
-// registration (BT-30) is not its OIB: the OIB keeps the tax scope, so the
-// export writes both back where they were.
+// registration (BT-30) is not its OIB: it stays an identity, so the export
+// writes both back where they were.
 func TestImportSellerTaxRegistrationBesideLegalID(t *testing.T) {
 	inv := importExample(t, "eRacun-Nije u sustavu PDV", func(doc *goblubl.Invoice) {
 		doc.AccountingSupplierParty.Party.PartyLegalEntity.CompanyID.Value = "080000001"
 	})
-	oib := org.IdentityForType(inv.Supplier.Identities, hr.IdentityTypeOIB)
-	require.NotNil(t, oib)
-	assert.Equal(t, org.IdentityScopeTax, oib.Scope)
+	assert.Equal(t, &tax.Identity{Country: "HR", Code: "12345678903"}, inv.Supplier.TaxID)
+	require.Len(t, inv.Supplier.Identities, 1)
+	assert.Equal(t, cbc.Code("080000001"), inv.Supplier.Identities[0].Code)
 	doc := exportTestInvoice(t, inv)
 	p := doc.AccountingSupplierParty.Party
 	assert.Equal(t, "080000001", p.PartyLegalEntity.CompanyID.Value)
@@ -683,12 +694,43 @@ func TestImportSellerTaxRegistrationBesideLegalID(t *testing.T) {
 	assert.Equal(t, "FRE", p.PartyTaxScheme[0].TaxScheme.ID.Value)
 }
 
+// TestSellerWithOutsideScopeAmounts checks that an invoice with an amount
+// not subject to VAT (O) from a seller registered for VAT shows no VAT
+// identifier (BR-O-02): no tax registration at all, and the OIB as the legal
+// registration (BT-30), as in the official example "Neoporezivi racun".
+func TestSellerWithOutsideScopeAmounts(t *testing.T) {
+	inv := scenarioInvoice()
+	inv.Customer = customerWithoutVATNumber()
+	inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
+	addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
+	p := exportTestInvoice(t, inv).AccountingSupplierParty.Party
+	assert.Empty(t, p.PartyTaxScheme)
+	require.NotNil(t, p.PartyLegalEntity.CompanyID)
+	assert.Equal(t, "12345678903", p.PartyLegalEntity.CompanyID.Value)
+}
+
+// TestImportSellerOnOutsideScopeInvoice checks the seller of the official
+// example "Neoporezivi racun", which has no tax registration at all: its OIB
+// comes from its legal registration (BT-30) into its tax ID. A seller that is
+// not registered for VAT gives a tax registration (BT-32), so this one comes
+// in as registered, and exports as it came.
+func TestImportSellerOnOutsideScopeInvoice(t *testing.T) {
+	inv := importExample(t, "Neoporezivi racun", nil)
+	assert.Equal(t, "HR", inv.GetRegime().String())
+	assert.Equal(t, &tax.Identity{Country: "HR", Code: "12345678903"}, inv.Supplier.TaxID)
+	assert.True(t, eracun.RegisteredForVAT(inv.Supplier))
+	assert.Empty(t, inv.Supplier.Identities)
+	p := exportTestInvoice(t, inv).AccountingSupplierParty.Party
+	assert.Empty(t, p.PartyTaxScheme)
+	assert.Equal(t, "12345678903", p.PartyLegalEntity.CompanyID.Value)
+}
+
 // TestSellerOutsideVATKeepsOIBInTaxRegistration checks that the OIB is the
 // seller's tax registration (BT-32) even when it has another identity with
 // the tax scope.
 func TestSellerOutsideVATKeepsOIBInTaxRegistration(t *testing.T) {
 	inv := outsideVATInvoice()
-	inv.Supplier.Identities = append(inv.Supplier.Identities, &org.Identity{Scope: org.IdentityScopeTax, Code: "XYZ123"})
+	inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "XYZ123"}}
 	doc := exportTestInvoice(t, inv)
 	var ids []string
 	for _, pts := range doc.AccountingSupplierParty.Party.PartyTaxScheme {
@@ -703,7 +745,7 @@ func TestSellerOutsideVATKeepsOIBInTaxRegistration(t *testing.T) {
 // (BT-32), and never to a party identification.
 func TestSellerOutsideVATBesideLegalID(t *testing.T) {
 	inv := outsideVATInvoice()
-	inv.Supplier.Identities = append(inv.Supplier.Identities, &org.Identity{Scope: org.IdentityScopeLegal, Code: "080000001"})
+	inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeLegal, Code: "080000001"}}
 	p := exportTestInvoice(t, inv).AccountingSupplierParty.Party
 	assert.Equal(t, "080000001", p.PartyLegalEntity.CompanyID.Value)
 	require.Len(t, p.PartyTaxScheme, 1)
@@ -718,7 +760,8 @@ func TestImportSellerTaxRegistrationWithPrefix(t *testing.T) {
 	inv := importExample(t, "eRacun-Nije u sustavu PDV", func(doc *goblubl.Invoice) {
 		doc.AccountingSupplierParty.Party.PartyTaxScheme[0].CompanyID.Value = "HR12345678903"
 	})
-	assert.Equal(t, []*org.Identity{{Type: hr.IdentityTypeOIB, Scope: org.IdentityScopeLegal, Code: "12345678903"}}, inv.Supplier.Identities)
+	assert.Equal(t, &tax.Identity{Country: "HR", Code: "12345678903"}, inv.Supplier.TaxID)
+	assert.Empty(t, inv.Supplier.Identities)
 }
 
 // TestImportForeignSellerTaxRegistration checks that a seller outside
@@ -736,7 +779,7 @@ func TestImportForeignSellerTaxRegistration(t *testing.T) {
 	inv, ok := env.Extract().(*bill.Invoice)
 	require.True(t, ok)
 	assert.Nil(t, inv.Supplier.TaxID)
-	assert.Nil(t, org.IdentityForType(inv.Supplier.Identities, hr.IdentityTypeOIB))
+	assert.False(t, inv.Supplier.Ext.Has(eracun.ExtKeyVATStatus))
 }
 
 // TestGOBLExamples exports the GOBL example invoices in ../examples/out, the

@@ -59,6 +59,9 @@
 		],
 		"registration": {
 			"other": "Tvrtka A d.o.o. osnovana na Trgovačkom sudu u ..."
+		},
+		"ext": {
+			"hr-eracun-vat-status": "registered"
 		}
 	},
 	"customer": {

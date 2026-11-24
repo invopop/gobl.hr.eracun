@@ -178,29 +178,34 @@ func exportSellerContactPoint(inv *bill.Invoice, out *goblubl.Invoice) {
 }
 
 // taxSchemeOutsideVAT is the tax scheme of the seller's tax registration
-// (BT-32), which the HR CIUS uses for a seller outside the VAT system.
+// (BT-32), which the HR CIUS uses for a seller with no VAT identifier.
 const taxSchemeOutsideVAT = "FRE"
 
-// exportSellerTaxRegistration writes the tax registration (BT-32) of a
-// seller outside the VAT system, one without a VAT identifier (BT-31), with
-// the tax scheme the HR CIUS uses. gobl.ubl writes each identity with the tax
-// scope there, with its type or LOC as the scheme, and nothing for an OIB
-// identity with the legal scope, so the OIB is added when it isn't there. An
-// HR seller's tax registration is its OIB (HR-BR-53).
+// exportSellerTaxRegistration writes the seller's OIB where its VAT status
+// puts it. A seller registered for VAT keeps the VAT identifier (BT-31) that
+// gobl.ubl writes from its tax ID, except on an invoice with an amount not
+// subject to VAT (O), which shows no VAT identifier (BR-O-02): as in the
+// official example "Neoporezivi racun", it then has no tax registration. A
+// seller that is not registered has no VAT identifier either: its OIB is its
+// tax registration (BT-32) with the scheme the HR CIUS uses, as in the
+// official example "eRacun-Nije u sustavu PDV". gobl.ubl writes other
+// identities with the tax scope there too, with their type or LOC as the
+// scheme, which becomes the same scheme. Without a VAT identifier the seller
+// needs a legal registration (BR-CO-26): its OIB, unless an identity already
+// gives one (BT-30).
 func exportSellerTaxRegistration(inv *bill.Invoice, out *goblubl.Invoice) {
 	p := out.AccountingSupplierParty.Party
-	if p == nil {
+	if p == nil || inv.Supplier == nil {
 		return
 	}
-	for _, pts := range p.PartyTaxScheme {
-		if pts.TaxScheme != nil && pts.TaxScheme.ID.Value == goblubl.TaxSchemeVAT {
-			return
-		}
+	notRegistered := eracun.NotRegisteredForVAT(inv.Supplier)
+	if !notRegistered && !hasOutsideScopeRate(vatTotal(inv)) {
+		return
 	}
-	oib := cbc.CodeEmpty
-	if !eracun.PartyHasVATNumber(inv.Supplier) {
-		oib = eracun.PartyOIB(inv.Supplier)
-	}
+	p.PartyTaxScheme = slices.DeleteFunc(p.PartyTaxScheme, func(pts goblubl.PartyTaxScheme) bool {
+		return pts.TaxScheme != nil && pts.TaxScheme.ID.Value == goblubl.TaxSchemeVAT
+	})
+	oib := eracun.PartyOIB(inv.Supplier)
 	written := false
 	for _, pts := range p.PartyTaxScheme {
 		if pts.TaxScheme != nil {
@@ -210,11 +215,20 @@ func exportSellerTaxRegistration(inv *bill.Invoice, out *goblubl.Invoice) {
 			written = true
 		}
 	}
-	if oib != cbc.CodeEmpty && !written {
+	if oib == cbc.CodeEmpty {
+		return
+	}
+	if notRegistered && !written {
 		p.PartyTaxScheme = append(p.PartyTaxScheme, goblubl.PartyTaxScheme{
 			CompanyID: &goblubl.IDType{Value: oib.String()},
 			TaxScheme: &goblubl.TaxScheme{ID: goblubl.IDType{Value: taxSchemeOutsideVAT}},
 		})
+	}
+	if p.PartyLegalEntity == nil {
+		p.PartyLegalEntity = new(goblubl.PartyLegalEntity)
+	}
+	if p.PartyLegalEntity.CompanyID == nil {
+		p.PartyLegalEntity.CompanyID = &goblubl.IDType{Value: oib.String()}
 	}
 }
 
@@ -349,6 +363,20 @@ func vatTotal(inv *bill.Invoice) *tax.CategoryTotal {
 		return nil
 	}
 	return inv.Totals.Taxes.Category(tax.CategoryVAT)
+}
+
+// hasOutsideScopeRate says whether the VAT totals have an amount not subject
+// to VAT (O).
+func hasOutsideScopeRate(vat *tax.CategoryTotal) bool {
+	if vat == nil {
+		return false
+	}
+	for _, r := range vat.Rates {
+		if r.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryOutsideScope {
+			return true
+		}
+	}
+	return false
 }
 
 func hasExemptRate(vat *tax.CategoryTotal) bool {

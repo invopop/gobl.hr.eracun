@@ -59,6 +59,9 @@
 		],
 		"registration": {
 			"other": "Osnovano na trgovačkom sudu, temeljni kapital"
+		},
+		"ext": {
+			"hr-eracun-vat-status": "registered"
 		}
 	},
 	"customer": {

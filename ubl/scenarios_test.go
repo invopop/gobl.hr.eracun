@@ -255,8 +255,8 @@ var scenarios = []scenario{
 		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-31"},
 
-	// An issuer outside the VAT system: a tax ID with only the country and its
-	// OIB as an identity.
+	// An issuer not registered for VAT says so in its VAT status; its OIB
+	// stays in its tax ID.
 	{name: "issuer outside VAT, exempt as in the official sample", edit: func(inv *bill.Invoice) {
 		inv.Supplier = supplierOutsideVAT()
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, "")}
@@ -265,28 +265,28 @@ var scenarios = []scenario{
 	{name: "issuer outside VAT charging VAT", edit: func(inv *bill.Invoice) {
 		inv.Supplier = supplierOutsideVAT()
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-13"},
-	{name: "issuer outside VAT with no OIB identity", edit: func(inv *bill.Invoice) {
-		inv.Supplier = supplierOutsideVAT()
-		inv.Supplier.Identities = nil
-		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, "")}
-		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
+	{name: "issuer that doesn't say whether it is registered for VAT", edit: func(inv *bill.Invoice) {
+		inv.Supplier.Ext = tax.Extensions{}
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-14"},
+	{name: "issuer with no OIB in its tax ID", edit: func(inv *bill.Invoice) {
+		inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
+		inv.Supplier.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "12345678903"}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-15"},
 
 	// Not subject to VAT (O): BR-O-02 forbids the seller's and the buyer's
-	// VAT identifiers.
+	// VAT identifiers. The export leaves the seller's out; the buyer gives
+	// no VAT number.
 	{name: "outside scope, no VAT identifiers", edit: func(inv *bill.Invoice) {
 		inv.Supplier = supplierOutsideVAT()
 		inv.Customer = customerWithoutVATNumber()
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
 		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
 	}},
-	{name: "outside scope from an issuer in the VAT system", edit: func(inv *bill.Invoice) {
+	{name: "outside scope from an issuer registered for VAT", edit: func(inv *bill.Invoice) {
 		inv.Customer = customerWithoutVATNumber()
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
 		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
-	},
-		fault: "GOBL-HR-ERACUN-BILL-INVOICE-15", rule: "BR-O-02",
-	},
+	}},
 	{name: "outside scope to a buyer with a VAT number", edit: func(inv *bill.Invoice) {
 		inv.Supplier = supplierOutsideVAT()
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
@@ -537,6 +537,7 @@ func scenarioInvoice() *bill.Invoice {
 		Supplier: &org.Party{
 			Name:      "TVRTKA A d.o.o.",
 			TaxID:     &tax.Identity{Country: "HR", Code: "12345678903"},
+			Ext:       tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: eracun.VATStatusRegistered}),
 			Addresses: []*org.Address{{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"}},
 			People:    []*org.Person{operator()},
 		},
@@ -560,15 +561,15 @@ func operator() *org.Person {
 	}
 }
 
-// supplierOutsideVAT is an issuer outside the VAT system: a tax ID with only
-// the country, and its OIB as an identity.
+// supplierOutsideVAT is an issuer not registered for VAT: its OIB in its tax
+// ID, and its VAT status saying so.
 func supplierOutsideVAT() *org.Party {
 	return &org.Party{
-		Name:       "Obrt A",
-		TaxID:      &tax.Identity{Country: "HR"},
-		Identities: []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}},
-		Addresses:  []*org.Address{{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"}},
-		People:     []*org.Person{operator()},
+		Name:      "Obrt A",
+		TaxID:     &tax.Identity{Country: "HR", Code: "12345678903"},
+		Ext:       tax.ExtensionsOf(cbc.CodeMap{eracun.ExtKeyVATStatus: eracun.VATStatusNotRegistered}),
+		Addresses: []*org.Address{{Street: "Ulica 1", Locality: "Zagreb", Code: "10000", Country: "HR"}},
+		People:    []*org.Person{operator()},
 	}
 }
 
