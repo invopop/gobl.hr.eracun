@@ -1,6 +1,7 @@
 package ubl
 
 import (
+	"encoding/json"
 	"slices"
 
 	"github.com/invopop/gobl"
@@ -11,7 +12,9 @@ import (
 	"github.com/invopop/gobl/catalogues/untdid"
 	"github.com/invopop/gobl/currency"
 	"github.com/invopop/gobl/num"
+	"github.com/invopop/gobl/org"
 	"github.com/invopop/gobl/regimes/hr"
+	"github.com/invopop/gobl/rules"
 	"github.com/invopop/gobl/tax"
 )
 
@@ -161,6 +164,173 @@ func exportAccountingVATTotal(inv *bill.Invoice, out *goblubl.Invoice, vat num.A
 	if rate := currency.MatchExchangeRate(inv.ExchangeRates, inv.Currency, acc); rate != nil {
 		out.TaxTotal[1].TaxAmount = goblubl.NewAmount(rate.Convert(vat), acc.String())
 	}
+}
+
+// importConsumptionTax restates the PP charges of a received eRačun as the hr
+// regime's PP tax on the lines they cover, the shape the export writes them
+// from, so that an invoice exported here imports as it was issued.
+//
+// A PP charge is an exempt document level charge with the HR tax category
+// PP, a base and a rate. It moves onto the lines whose item attribute HR:PP
+// gives its rate, which lose that attribute, and the exempt VAT note goes too
+// when no exempt amount is left: the import read it from the VAT breakdown's
+// exempt entry, which the PP charges alone made up.
+//
+// The move is made on a copy of the invoice, which replaces it only when the
+// copy calculates, at each rate moved, the base and amount of that rate's
+// charge, keeps the VAT, the total with tax and the payable amount (which
+// gobl.ubl refuses to see change), and breaks no rule the invoice didn't. So the lines' amounts add up to the
+// base, and each of them has VAT (rule 26). The supplier isn't outside VAT
+// (rule 31), nor are there O amounts (rule 32), and no PP charge is left
+// (rule 30): the PP of an invoice moves whole or not at all. Otherwise the
+// invoice stays as imported, such as the official example, which has no
+// HR:PP lines.
+//
+// It runs once the totals are reconciled, so a move can't hide a difference
+// from the declared totals, and gobl.ubl doesn't run it on an invoice tagged
+// for bypass, whose declared totals a move would leave stale. The UBL
+// document is only read.
+func importConsumptionTax(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error {
+	inv, _, ok := invoices(env, doc)
+	if !ok || !slices.ContainsFunc(inv.Charges, isConsumptionTaxCharge) {
+		return nil
+	}
+	data, err := json.Marshal(inv)
+	if err != nil {
+		return err
+	}
+	moved := new(bill.Invoice)
+	if err := json.Unmarshal(data, moved); err != nil {
+		return err
+	}
+	charges := moveConsumptionTax(moved)
+	if len(charges) == 0 {
+		return nil
+	}
+	if err := moved.Calculate(); err != nil {
+		return nil //nolint:nilerr // an invoice that doesn't calculate keeps its PP charges
+	}
+	if vat := vatTotal(moved); vat == nil || !hasExemptRate(vat) {
+		removeExemptNote(moved)
+	}
+	if !consumptionTaxMovedExactly(inv, moved, charges) || raisesNewFaults(inv, moved) {
+		return nil
+	}
+	*inv = *moved
+	return nil
+}
+
+// moveConsumptionTax moves each PP charge with a base and a rate onto the
+// lines whose HR:PP attribute gives that rate, as the PP tax, and returns the
+// charges moved.
+func moveConsumptionTax(inv *bill.Invoice) []*bill.Charge {
+	var moved, kept []*bill.Charge
+	for _, c := range inv.Charges {
+		var lines []*bill.Line
+		if isConsumptionTaxCharge(c) && c.Percent != nil && c.Base != nil {
+			for _, l := range inv.Lines {
+				if l != nil && l.Item != nil && hasConsumptionTaxAttribute(l.Item, *c.Percent) {
+					lines = append(lines, l)
+				}
+			}
+		}
+		if len(lines) == 0 {
+			kept = append(kept, c)
+			continue
+		}
+		for _, l := range lines {
+			p := *c.Percent
+			l.Taxes = append(l.Taxes, &tax.Combo{Category: hr.TaxCategoryPP, Percent: &p})
+			l.Item.Attributes = slices.DeleteFunc(l.Item.Attributes, func(a *org.Attribute) bool {
+				return a != nil && a.Label == eracun.ItemAttributeConsumptionTax
+			})
+			if len(l.Item.Attributes) == 0 {
+				l.Item.Attributes = nil
+			}
+		}
+		moved = append(moved, c)
+	}
+	inv.Charges = kept
+	return moved
+}
+
+// isConsumptionTaxCharge says whether the charge carries PP the way an
+// eRačun does: exempt from VAT, with the HR tax category PP.
+func isConsumptionTaxCharge(c *bill.Charge) bool {
+	tc := c.Taxes.Get(tax.CategoryVAT)
+	return tc != nil && tc.Ext.Get(eracun.ExtKeyTaxCategory) == eracun.TaxLabelPP &&
+		tc.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryExempt
+}
+
+// hasConsumptionTaxAttribute says whether the item has the HR:PP attribute
+// with the rate, written as the export does, without the percent sign.
+func hasConsumptionTaxAttribute(it *org.Item, rate num.Percentage) bool {
+	for _, a := range it.Attributes {
+		if a == nil || a.Label != eracun.ItemAttributeConsumptionTax {
+			continue
+		}
+		if p, err := num.PercentageFromString(a.Text + "%"); err == nil && p.Equals(rate) {
+			return true
+		}
+	}
+	return false
+}
+
+// removeExemptNote removes the invoice's exempt VAT note.
+func removeExemptNote(inv *bill.Invoice) {
+	inv.Tax.Notes = slices.DeleteFunc(inv.Tax.Notes, func(n *tax.Note) bool {
+		return n != nil && n.Category == tax.CategoryVAT && n.Ext.Get(untdid.ExtKeyTaxCategory) == en16931.TaxCategoryExempt
+	})
+	if len(inv.Tax.Notes) == 0 {
+		inv.Tax.Notes = nil
+	}
+}
+
+// consumptionTaxMovedExactly says whether the invoice with its PP moved onto
+// the lines charges, at each rate moved, the base and amount of that rate's
+// charge, with the VAT, the total with tax and the payable amount unchanged.
+func consumptionTaxMovedExactly(inv, moved *bill.Invoice, charges []*bill.Charge) bool {
+	was, is := inv.Totals, moved.Totals
+	if !is.TotalWithTax.Equals(was.TotalWithTax) || !is.Payable.Equals(was.Payable) || !vatAmount(moved).Equals(vatAmount(inv)) {
+		return false
+	}
+	var rates []*tax.RateTotal
+	if pp := consumptionTaxTotal(moved); pp != nil {
+		rates = pp.Rates
+	}
+	for _, c := range charges {
+		i := slices.IndexFunc(rates, func(r *tax.RateTotal) bool {
+			return r.Percent != nil && r.Percent.Equals(*c.Percent)
+		})
+		if i < 0 || !rates[i].Base.Equals(*c.Base) || !rates[i].Amount.Equals(c.Amount) {
+			return false
+		}
+	}
+	return true
+}
+
+func vatAmount(inv *bill.Invoice) num.Amount {
+	a := num.AmountZero
+	if vat := vatTotal(inv); vat != nil {
+		a = vat.Amount
+	}
+	return a
+}
+
+// raisesNewFaults says whether the invoice with its PP moved breaks a rule,
+// by fault code, that the invoice as imported didn't.
+func raisesNewFaults(inv, moved *bill.Invoice) bool {
+	had := rules.Validate(inv)
+	faults := rules.Validate(moved)
+	if faults == nil {
+		return false
+	}
+	for _, f := range faults.List() {
+		if had == nil || !had.HasCode(f.Code()) {
+			return true
+		}
+	}
+	return false
 }
 
 func consumptionTaxTotal(inv *bill.Invoice) *tax.CategoryTotal {

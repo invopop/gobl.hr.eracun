@@ -42,7 +42,7 @@ Croatian eRačuni take on their weight.
   and GOBL's `convert` register on import. Export writes the business process,
   the HR tax categories, the operator (`SellerContact`) and the
   `hrextac:HRFISK20Data` extension; import reads the process, operator, HR
-  tax categories and cash-basis flag back into GOBL.
+  tax categories, consumption tax and cash-basis flag back into GOBL.
 - the module root is reserved for other eRačun tooling built on top of the
   addon.
 
@@ -139,10 +139,33 @@ EN 16931 allows no exempt amount beside them (BR-O-11). An invoice with the PP
 tax on its lines can't also have a line, charge or discount with the label
 `hr-eracun-tax-category: PP`, the form received invoices carry PP in.
 
+Importing an eRačun moves its PP charges back onto the lines as the PP tax,
+so an invoice exported here comes back as it was issued. A charge moves onto
+the lines whose `HR:PP` item property gives its rate, and those lines lose
+the `HR:PP` attribute; the exempt VAT note goes too when no exempt amount is
+left, since the import read it from the exempt entry of the VAT breakdown
+that the PP charges alone made up. The move is exact or not made at all: the
+lines' amounts must add up to the charge's base, the PP they calculate to
+must be its amount, the VAT, the total with tax and the payable amount must
+stay the same, and the invoice must break no rule it didn't before. As an
+invoice can't have the PP tax beside a PP charge, either every PP charge moves
+or none does. Otherwise the import keeps PP the way the eRačun carries it, an
+exempt charge with the label `hr-eracun-tax-category: PP` and the `HR:PP`
+attributes on the lines, as for:
+
+- an eRačun without `HR:PP` properties, such as the official example, since
+  nothing in the HR CIUS ties a PP charge to its lines;
+- lines whose amounts don't add up to the base of the charge at their rate;
+- a supplier outside the VAT system, or amounts not subject to VAT (O), which
+  the rules above refuse beside PP on the lines;
+- an invoice whose totals differ from those it declares, which gobl.ubl keeps
+  as declared (tagged `bypass`).
+
+The move runs once gobl.ubl has checked the totals against the declared ones,
+so it can't hide a difference between them.
+
 Limits:
 
-- Importing an eRačun reads PP as that exempt charge, with the `HR:PP` item
-  attributes, not as the PP tax on the lines.
 - A price that includes VAT (`prices_include: VAT`) doesn't include PP, which
   is added on top of it.
 - A document level discount without PP lowers the VAT base, but not the PP
@@ -279,7 +302,7 @@ Tax Administration's schematron, which the tests run (see below).
 | Module | Waits for | Replaced by | Pin |
 | --- | --- | --- | --- |
 | `github.com/invopop/gobl` | the `hr` regime (branch `eu3-18-hr-regime`, a rewrite on the Slovakia template, which [invopop/gobl#724](https://github.com/invopop/gobl/pull/724) now carries) | branch commit `8558e34a`, which adds the `PP` consumption tax category | the gobl release that includes it, or a `main` pseudo-version after merge |
-| `github.com/invopop/gobl.ubl` | the `ExtensionContent` fix that registers extension data types ([invopop/gobl.ubl#183](https://github.com/invopop/gobl.ubl/pull/183), branch `extension-content-any`), then the generic fields the HR format uses (`SellerContact`, tax category `Name`), restacked on that fix ([invopop/gobl.ubl#179](https://github.com/invopop/gobl.ubl/pull/179), branch `eu3-18-hr-fields`) | branch commit `e1af3b2`, the head of #179 (with #183 merged in) | the gobl.ubl release that includes both |
+| `github.com/invopop/gobl.ubl` | the `ExtensionContent` fix that registers extension data types ([invopop/gobl.ubl#183](https://github.com/invopop/gobl.ubl/pull/183), branch `extension-content-any`), then the generic fields the HR format uses (`SellerContact`, tax category `Name`), restacked on that fix ([invopop/gobl.ubl#179](https://github.com/invopop/gobl.ubl/pull/179), branch `eu3-18-hr-fields`), then the import funcs that run after totals reconciliation, which move PP back onto the lines ([invopop/gobl.ubl#202](https://github.com/invopop/gobl.ubl/pull/202), branch `eu3-18-reconciled-import`, stacked on #179) | branch commit `1d2a6bb`, the head of #202 | the gobl.ubl release that includes all three |
 
 To follow a newer commit of either branch, run for example
 `go mod edit -replace=github.com/invopop/gobl=github.com/invopop/gobl@<commit>`
