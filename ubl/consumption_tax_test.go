@@ -191,6 +191,8 @@ func TestConsumptionTaxExemptLine(t *testing.T) {
 	require.Len(t, tt.TaxSubtotal, 1)
 	assert.Equal(t, "103.00", tt.TaxSubtotal[0].TaxableAmount.Value)
 	assert.Equal(t, "Oslobođeno PDV-a", *tt.TaxSubtotal[0].TaxCategory.TaxExemptionReason)
+	assert.Nil(t, tt.TaxSubtotal[0].TaxCategory.TaxExemptionReasonCode,
+		"the entry states the exempt line's ground, which has no code: not the consumption tax's code beside the line's text")
 }
 
 // TestConsumptionTaxInAnotherCurrency checks the VAT total in the regime's

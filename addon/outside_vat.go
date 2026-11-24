@@ -2,6 +2,7 @@ package eracun
 
 import (
 	"github.com/invopop/gobl/bill"
+	"github.com/invopop/gobl/cbc"
 	"github.com/invopop/gobl/regimes/hr"
 )
 
@@ -95,4 +96,10 @@ func invoiceStatesNoExemptAmounts(val any) bool {
 		return false
 	}
 	return inv.Totals == nil || inv.Totals.Taxes == nil || inv.Totals.Taxes.Category(hr.TaxCategoryPP) == nil
+}
+
+// keyNotTax checks that a charge's key is not tax.
+func keyNotTax(val any) bool {
+	k, ok := val.(cbc.Key)
+	return !ok || k != bill.ChargeKeyTax
 }

@@ -234,7 +234,7 @@ func leafDiff(a, b []leaf) (onlyA, onlyB []leaf) {
 //     which gobl.ubl writes for every format;
 //   - the pass-through VATEX code, which the export gives every amount left
 //     out of the VAT base, where the original may state its reason in words
-//     only.
+//     only (see addedPassThroughCode).
 func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 	other := original
 	if lost {
@@ -252,7 +252,7 @@ func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 		// VAT Act wording whatever the original said.
 		return slices.ContainsFunc(other, func(o leaf) bool { return o.path == l.path })
 	case strings.HasSuffix(l.path, "/cbc:TaxExemptionReasonCode"):
-		return !lost && l.value == "VATEX-EU-79-C"
+		return !lost && addedPassThroughCode(l, exported)
 	case strings.HasSuffix(l.path, "/cac:PartyName/cbc:Name") && !lost:
 		legal := strings.TrimSuffix(l.path, "/cac:PartyName/cbc:Name") + "/cac:PartyLegalEntity/cbc:RegistrationName"
 		if hasLeaf(original, leaf{legal, l.value}) {
@@ -260,6 +260,33 @@ func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 		}
 	}
 	return sameNumberAt(l, other)
+}
+
+// addedPassThroughCode reports a pass-through VATEX code the export may add:
+// on a line or charge whose category names an amount left out of the VAT
+// base, and on the VAT breakdown of a document with no exempt supply. Beside
+// an exempt supply the breakdown entry states the supply's ground, so the
+// code there, or on the supply itself, is a difference.
+func addedPassThroughCode(l leaf, exported []leaf) bool {
+	if l.value != "VATEX-EU-79-C" {
+		return false
+	}
+	const (
+		lineCategory   = "/cac:ClassifiedTaxCategory/cbc:Name"
+		chargeCategory = "]/cac:TaxCategory/cbc:Name"
+	)
+	if strings.Contains(l.path, "/cac:TaxSubtotal/") {
+		return !slices.ContainsFunc(exported, func(o leaf) bool {
+			return o.value == "HR:E" && (strings.HasSuffix(o.path, lineCategory) || strings.HasSuffix(o.path, chargeCategory))
+		})
+	}
+	name := strings.TrimSuffix(l.path, "cbc:TaxExemptionReasonCode") + "cbc:Name"
+	if !strings.HasSuffix(name, lineCategory) && !strings.HasSuffix(name, chargeCategory) {
+		return false
+	}
+	return slices.ContainsFunc(exported, func(o leaf) bool {
+		return o.path == name && slices.Contains([]string{"HR:POVNAK", "HR:PP", "HR:PPMV", "HR:N"}, o.value)
+	})
 }
 
 func isOne(v string) bool {
@@ -321,4 +348,38 @@ func TestLeafDiffSeesMoves(t *testing.T) {
 	lost, added = leafDiff(doc("X", "Y"), doc("Y", "X"))
 	assert.Len(t, lost, 2)
 	assert.Len(t, added, 2)
+}
+
+// TestAcceptedPassThroughCode checks where the fidelity test lets the export
+// add the pass-through VATEX code: on an amount left out of the VAT base, and
+// on the VAT breakdown of a document with no exempt supply. Anywhere else the
+// code would give an exempt supply the wrong ground.
+func TestAcceptedPassThroughCode(t *testing.T) {
+	const (
+		lineCat = "/Invoice/cac:InvoiceLine[%d]/cac:Item/cac:ClassifiedTaxCategory/"
+		chrgCat = "/Invoice/cac:AllowanceCharge[/true1]/cac:TaxCategory/"
+		rowCode = "/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReasonCode"
+	)
+	code := func(path string) leaf { return leaf{path + "cbc:TaxExemptionReasonCode", "VATEX-EU-79-C"} }
+	name := func(path, label string) leaf { return leaf{path + "cbc:Name", label} }
+	line := func(i int) string { return fmt.Sprintf(lineCat, i) }
+	row := leaf{rowCode, "VATEX-EU-79-C"}
+
+	deposit := []leaf{name(line(1), "HR:PDV25"), name(line(2), "HR:POVNAK"), code(line(2)), row}
+	assert.True(t, acceptedDifference(code(line(2)), false, nil, deposit), "on a deposit line")
+	assert.True(t, acceptedDifference(row, false, nil, deposit), "on the breakdown of a document with no exempt supply")
+
+	fee := []leaf{name(chrgCat, "HR:N"), code(chrgCat), row}
+	assert.True(t, acceptedDifference(code(chrgCat), false, nil, fee), "on a fee charge")
+
+	exempt := []leaf{name(line(1), "HR:E"), code(line(1)), name(line(2), "HR:POVNAK"), code(line(2)), row}
+	assert.False(t, acceptedDifference(code(line(1)), false, nil, exempt), "on an exempt supply's line")
+	assert.True(t, acceptedDifference(code(line(2)), false, nil, exempt), "on the deposit line beside it")
+	assert.False(t, acceptedDifference(row, false, nil, exempt), "on the breakdown of a document with an exempt supply")
+
+	exemptCharge := []leaf{name(chrgCat, "HR:E"), code(chrgCat), row}
+	assert.False(t, acceptedDifference(code(chrgCat), false, nil, exemptCharge), "on an exempt charge")
+	assert.False(t, acceptedDifference(row, false, nil, exemptCharge), "on the breakdown beside an exempt charge")
+
+	assert.False(t, acceptedDifference(code(line(2)), true, deposit, nil), "a lost code is never accepted")
 }

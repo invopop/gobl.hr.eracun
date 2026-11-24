@@ -93,8 +93,9 @@ func outsideVATTaxCategory(label cbc.Code) *goblubl.TaxCategory {
 //
 // Their amounts join the one exempt entry EN 16931 allows in the VAT
 // breakdown (BR-E-01): the entry added here comes after those of gobl.ubl,
-// and mergeTaxSubtotals keeps the first reason it finds, so an exempt supply
-// on the same invoice gives the entry its ground.
+// and mergeTaxSubtotals keeps the first ground it finds, so an exempt supply
+// on the same invoice gives the entry its code and text, and the
+// pass-through code shows only on an invoice with no exempt supply.
 func exportAmountsOutsideVAT(inv *bill.Invoice, out *goblubl.Invoice) error {
 	lines, err := pairedLines(inv, out)
 	if err != nil {
@@ -159,14 +160,17 @@ func exemptNote(inv *bill.Invoice) *tax.Note {
 }
 
 // importAmountsOutsideVAT reads the lines and document level charges that an
-// eRačun names with the HR tax category of an amount left out of the VAT
-// base: HR:POVNAK, HR:PP, HR:PPMV or HR:N. The exempt VAT combo gobl.ubl read
-// for each is the HR CIUS encoding, so it goes, and the line or charge
-// carries the HR tax category in its own extensions. An exemption reason
-// text the export wouldn't write back is kept in its meta data.
+// eRačun gives the exempt category named with the HR tax category of an
+// amount left out of the VAT base: HR:POVNAK, HR:PP, HR:PPMV or HR:N. The
+// exempt VAT combo gobl.ubl read for each is the HR CIUS encoding, so it
+// goes, and the line or charge carries the HR tax category in its own
+// extensions. An exemption reason text the export wouldn't write back is kept
+// in its meta data.
 //
-// A document level allowance is left as read: GOBL has no allowance without
-// taxes (BR-32), so the addon's rules report its tax combo.
+// A document level allowance named that way can't be read as one: GOBL has
+// no discount without taxes (BR-32). Its VAT combo gets the HR tax category,
+// which the addon refuses (TAX-COMBO-02), so the invoice doesn't pass as one
+// with a discount on an exempt supply.
 func importAmountsOutsideVAT(in *goblubl.Invoice, inv *bill.Invoice, lines []goblubl.InvoiceLine) {
 	for i, ul := range lines {
 		l := inv.Lines[i]
@@ -174,7 +178,7 @@ func importAmountsOutsideVAT(in *goblubl.Invoice, inv *bill.Invoice, lines []gob
 			continue
 		}
 		ctc := ul.Item.ClassifiedTaxCategory
-		label, ok := outsideVATLabel(ctc.Name)
+		label, ok := outsideVATLabel(ctc.ID, ctc.Name)
 		if !ok {
 			continue
 		}
@@ -187,16 +191,19 @@ func importAmountsOutsideVAT(in *goblubl.Invoice, inv *bill.Invoice, lines []gob
 		}
 	}
 	documentCharges(in, inv, func(ac *goblubl.AllowanceCharge, c documentCharge) {
-		if c.charge == nil {
-			return
-		}
 		for _, cat := range ac.TaxCategory {
 			if cat == nil {
 				continue
 			}
-			label, ok := outsideVATLabel(cat.Name)
+			label, ok := outsideVATLabel(cat.ID, cat.Name)
 			if !ok {
 				continue
+			}
+			if c.charge == nil {
+				if combo := c.taxes.Get(tax.CategoryVAT); combo != nil {
+					combo.Ext = combo.Ext.Set(eracun.ExtKeyTaxCategory, label)
+				}
+				return
 			}
 			c.charge.Taxes = nil
 			c.charge.Ext = c.charge.Ext.Set(eracun.ExtKeyTaxCategory, label)
@@ -211,9 +218,11 @@ func importAmountsOutsideVAT(in *goblubl.Invoice, inv *bill.Invoice, lines []gob
 }
 
 // outsideVATLabel reads the HR tax category of an amount left out of the VAT
-// base from a tax category name, which carries it with the HR-TB-2 prefix.
-func outsideVATLabel(name *string) (cbc.Code, bool) {
-	if name == nil {
+// base from the tax category of a line or charge: the exempt category (E),
+// named with the HR-TB-2 prefix. A category with VAT is what it says it is,
+// whatever its name.
+func outsideVATLabel(id *goblubl.IDType, name *string) (cbc.Code, bool) {
+	if id == nil || id.Value != en16931.TaxCategoryExempt.String() || name == nil {
 		return cbc.CodeEmpty, false
 	}
 	s, ok := strings.CutPrefix(*name, taxCategoryPrefix)

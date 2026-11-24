@@ -118,17 +118,23 @@ EN 16931 has no place for an amount outside the VAT base beside taxed ones,
 so the UBL export writes it the way the HR CIUS does: VAT category `E` named
 `HR:<category>`, with the exemption reason code `VATEX-EU-79-C`, in the one
 exempt entry of the VAT breakdown, and as category `O` under its own scheme in
-the HR breakdown. Importing an eRačun takes that encoding away again, so a
-received amount has the same shape as an issued one.
+the HR breakdown. Importing an eRačun takes that encoding away again, from
+a line or charge whose exempt category has one of those names, so a received
+amount has the same shape as an issued one.
 
 Limits:
 
 - An invoice with amounts not subject to VAT (O) can't have one: EN 16931
   allows no exempt amount beside them (BR-O-11).
-- A document level discount can't be one, since a discount needs taxes
-  (BR-32). A received one keeps its exempt tax combo, which the rules reject.
-- A charge with the key `tax` is written with the charge reason code `TX`,
-  which the EN 16931 schematron refuses (BR-CL-20), so leave the key out.
+- A document level discount can't be one: a discount has taxes (BR-32) and
+  lowers the VAT base, so one with the extension is rejected. Give back such
+  an amount, a returned deposit for example, as a line without taxes with a
+  negative quantity. A received allowance named as one keeps its exempt tax
+  combo with the category, which the rules reject.
+- A charge without taxes can't have the key `tax`, natural as it is for
+  PPMV: EN 16931 writes that key as the charge reason code `TX`, which its
+  code list for charges doesn't have (BR-CL-20), so it is rejected. Name the
+  tax in the charge's `reason`.
 
 ## Exemption reasons
 
@@ -154,14 +160,19 @@ fiscalization would refuse. The export writes the code on the line or charge
 and on the VAT breakdown.
 The code belongs to the tax combo, so two exempt lines may have different
 grounds. EN 16931 allows one exempt entry in the VAT breakdown (BR-E-01),
-which gets the first ground; the HR breakdown has an entry for each.
+which states one ground: the code and the text of the first exempt supply,
+never the code of one amount beside the text of another. The HR breakdown
+has an entry for each set of exempt lines with the same code, with the reason
+text when a VAT note gives one; it doesn't state the code.
 
 A reason text is optional: a VAT note for the category in `tax.notes`, whose
 text the export writes on the breakdown entry and on every line and charge of
 that category. Each exempt category needs the code or the note.
 
 An amount left out of the VAT base needs neither: the export gives it the
-code `VATEX-EU-79-C`, and a charge its own `reason` as the text.
+code `VATEX-EU-79-C`, and a charge its own `reason` as the text. That code
+shows in the VAT breakdown only on an invoice with no exempt supply; beside
+one, the exempt entry states the supply's ground.
 
 Importing an eRačun keeps a reason text that the export wouldn't write back
 in the meta `hr-eracun-tax-exemption-reason` of the line's item, or of the

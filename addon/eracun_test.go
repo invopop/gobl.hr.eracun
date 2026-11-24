@@ -330,8 +330,6 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 500, eracun.TaxLabelPOVNAK))
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-10"},
 		{"PP beside an O line", func(inv *bill.Invoice) {
-			inv.Supplier.TaxID = nil
-			inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
 			inv.Customer.TaxID = &tax.Identity{Country: "HR"}
 			inv.Customer.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:11111111119"}}
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}, consumptionTax(num.MakePercentage(3, 2))}
@@ -993,6 +991,45 @@ func TestAmountsOutsideVAT(t *testing.T) {
 	// The VAT totals hold the taxed line alone.
 	assert.Equal(t, "100.00", inv.Totals.Taxes.Category(tax.CategoryVAT).Rates[0].Base.String())
 	assert.Equal(t, "2159.00", inv.Totals.Payable.String())
+}
+
+// TestDiscountWithHRTaxCategory checks that a document level discount can't
+// name itself an amount left out of the VAT base: a discount has taxes
+// (BR-32), which lower the VAT base, so the category would be ignored.
+func TestDiscountWithHRTaxCategory(t *testing.T) {
+	inv := testInvoice()
+	inv.Discounts = []*bill.Discount{{
+		Reason: "Povrat ambalaže",
+		Amount: num.MakeAmount(500, 2),
+		Taxes:  tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}},
+		Ext:    outsideVATLabel(eracun.TaxLabelPOVNAK),
+	}}
+	require.NoError(t, inv.Calculate())
+	assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-37")
+
+	inv.Discounts[0].Ext = tax.Extensions{}
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+}
+
+// TestChargeWithoutTaxesWithKeyTax checks that a charge left out of the VAT
+// base can't have the key tax, natural as it is for the motor vehicle tax:
+// EN 16931 gives that key the charge reason code TX, which is not in the
+// code list for charges (BR-CL-20).
+func TestChargeWithoutTaxesWithKeyTax(t *testing.T) {
+	inv := testInvoice()
+	inv.Charges = []*bill.Charge{{
+		Key:    bill.ChargeKeyTax,
+		Reason: "Posebni porez na motorna vozila",
+		Amount: num.MakeAmount(200000, 2),
+		Ext:    outsideVATLabel(eracun.TaxLabelPPMV),
+	}}
+	require.NoError(t, inv.Calculate())
+	assertFault(t, inv, "GOBL-HR-ERACUN-BILL-INVOICE-38")
+
+	inv.Charges[0].Key = cbc.KeyEmpty
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
 }
 
 // TestInformativeChargeIsNotOutsideVAT checks that an informative charge,

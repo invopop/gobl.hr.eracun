@@ -68,9 +68,10 @@ lines:
     ext:
       hr-eracun-tax-category: "POVNAK"
 
-# Another fee that is not taxed, as one amount: a charge with no taxes.
+# Another amount that is not taxed, as one amount: a charge with no taxes.
+# Here a cost the supplier paid in the customer's name and for its account.
 charges:
-  - reason: "Naknada za dostavu paleta"
+  - reason: "Trošak plaćen u ime i za račun kupca"
     amount: "15.00"
 
 payment:

@@ -12,8 +12,9 @@ const (
 	// the UBL ProfileID.
 	ExtKeyProcess cbc.Key = "hr-eracun-process"
 
-	// ExtKeyTaxCategory is the HR tax category of a tax combo (HR-TB-2),
-	// written with the "HR:" prefix to the tax category name.
+	// ExtKeyTaxCategory is the HR tax category (HR-TB-2) of a VAT combo, or
+	// of a line or charge without taxes, written with the "HR:" prefix to the
+	// tax category name.
 	ExtKeyTaxCategory cbc.Key = "hr-eracun-tax-category"
 
 	// ExtKeyRejectionReason is the kind of reason a buyer rejects an invoice

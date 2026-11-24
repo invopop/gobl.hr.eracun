@@ -266,6 +266,65 @@ func TestImportTaxCategoryNeedsHRPrefix(t *testing.T) {
 	assert.NotContains(t, labels([]byte(plain)), eracun.TaxLabelPPMV)
 }
 
+// TestImportPassThroughAllowance checks a received document level allowance
+// named as an amount left out of the VAT base, such as a deposit given back.
+// GOBL has no discount without taxes (BR-32), so it can't be read as one: its
+// VAT combo keeps the HR tax category, which the addon refuses, instead of
+// reading as the discount on an exempt supply that it isn't.
+func TestImportPassThroughAllowance(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV-NEOP-POVRATNA-NAKNADA-trosak.xml"))
+	require.NoError(t, err)
+	const charge = "<cbc:ChargeIndicator>true</cbc:ChargeIndicator>\n\t\t<cbc:AllowanceChargeReason>#HR:POVNAK#Povratna naknada"
+	require.Equal(t, 1, strings.Count(string(data), charge))
+	allowance := strings.Replace(string(data), charge, strings.Replace(charge, "true", "false", 1), 1)
+
+	doc, err := goblubl.Decode([]byte(allowance))
+	require.NoError(t, err)
+	env, err := goblubl.Import(doc)
+	require.NoError(t, err)
+	inv := env.Extract().(*bill.Invoice)
+	require.Empty(t, inv.Charges)
+	require.Len(t, inv.Discounts, 1)
+	combo := inv.Discounts[0].Taxes.Get(tax.CategoryVAT)
+	require.NotNil(t, combo)
+	assert.Equal(t, eracun.TaxLabelPOVNAK, combo.Ext.Get(eracun.ExtKeyTaxCategory))
+
+	require.NoError(t, env.Calculate())
+	assert.ErrorContains(t, env.Validate(), "GOBL-HR-ERACUN-TAX-COMBO-02")
+}
+
+// TestImportPassThroughNameNeedsExemptCategory checks that a line is read as
+// an amount left out of the VAT base only when its category is the exempt
+// one the HR CIUS encodes it with. A line taxed at 25% that names itself
+// HR:POVNAK keeps its VAT.
+func TestImportPassThroughNameNeedsExemptCategory(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV-NEOP-POVRATNA-NAKNADA-stavka.xml"))
+	require.NoError(t, err)
+	const exempt = "<cbc:ID>E</cbc:ID>\n\t\t\t\t<cbc:Name>HR:POVNAK</cbc:Name>\n\t\t\t\t<cbc:Percent>0</cbc:Percent>"
+	require.Equal(t, 1, strings.Count(string(data), exempt))
+	taxed := strings.Replace(string(data), exempt,
+		"<cbc:ID>S</cbc:ID>\n\t\t\t\t<cbc:Name>HR:POVNAK</cbc:Name>\n\t\t\t\t<cbc:Percent>25</cbc:Percent>", 1)
+
+	read := func(data string) *bill.Line {
+		t.Helper()
+		doc, err := goblubl.Decode([]byte(data))
+		require.NoError(t, err)
+		env, err := goblubl.Import(doc)
+		require.NoError(t, err)
+		inv := env.Extract().(*bill.Invoice)
+		require.Len(t, inv.Lines, 2)
+		return inv.Lines[1]
+	}
+	deposit := read(string(data))
+	assert.True(t, eracun.LineOutsideVAT(deposit))
+	assert.Equal(t, eracun.TaxLabelPOVNAK, deposit.Ext.Get(eracun.ExtKeyTaxCategory))
+
+	line := read(taxed)
+	require.NotNil(t, line.Taxes.Get(tax.CategoryVAT), "the line keeps the VAT the document gives it")
+	assert.Equal(t, tax.KeyStandard, line.Taxes.Get(tax.CategoryVAT).Key)
+	assert.False(t, line.Ext.Has(eracun.ExtKeyTaxCategory))
+}
+
 // TestExemptSupplyGivesTheBreakdownReason checks the one exempt entry EN
 // 16931 allows in the VAT breakdown (BR-E-01) on an invoice with an exempt
 // supply and an amount left out of the VAT base: it has both amounts, and the
@@ -543,6 +602,8 @@ func TestAmountsOutsideVATReasons(t *testing.T) {
 	require.Len(t, exemptRows, 1)
 	assert.Equal(t, "23.28", exemptRows[0].TaxableAmount.Value)
 	assert.Equal(t, "Oslobođeno PDV-a", *exemptRows[0].TaxCategory.TaxExemptionReason)
+	assert.Nil(t, exemptRows[0].TaxCategory.TaxExemptionReasonCode,
+		"the entry states the exempt service's ground, which has no code: not the deposit's code beside the service's text")
 }
 
 // TestKeptExemptionReasonNeedsExemptCategory checks that a kept exemption

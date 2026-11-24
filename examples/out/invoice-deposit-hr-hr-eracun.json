@@ -4,7 +4,7 @@
 		"uuid": "8a51fd30-2a27-11ee-be56-0242ac120002",
 		"dig": {
 			"alg": "sha256",
-			"val": "d3d563fdfa00d217de36ffb1c17244c638d352b57b6677147497bd36ea7ae838"
+			"val": "dac00e3d14fede6bdcc0a9d91204b0af119906d2c7a2985834209374042df123"
 		},
 		"from": "iso6523-actorid-upis::9934:12345678903",
 		"to": "iso6523-actorid-upis::9934:11111111119"
@@ -141,7 +141,7 @@
 		"charges": [
 			{
 				"i": 1,
-				"reason": "Naknada za dostavu paleta",
+				"reason": "Trošak plaćen u ime i za račun kupca",
 				"amount": "15.00",
 				"ext": {
 					"hr-eracun-tax-category": "N"
