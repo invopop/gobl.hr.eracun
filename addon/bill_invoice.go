@@ -18,8 +18,10 @@ import (
 	"github.com/invopop/gobl/tax"
 )
 
-// SchemeIDOIB is the ISO 6523 ICD of the Croatian OIB, used for the eRačun
-// network address of a party.
+// SchemeIDOIB is the CEF electronic address scheme (EAS) code of the Croatian
+// OIB, the scheme of a party's eRačun network address. It is not an ISO 6523
+// ICD code, so a party identifier carries it as the prefix of its value,
+// 9934:<OIB>, and never as its scheme identifier.
 const SchemeIDOIB = "9934"
 
 // IdentityLabelKPD is the item identity label of the KPD classification
