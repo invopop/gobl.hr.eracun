@@ -113,6 +113,29 @@ func vatNumberMatchesOIBIdentity(val any) bool {
 	return id == nil || NormalizeOIB(id.Code.String()) == taxIDOIB(p)
 }
 
+// taxScopeIdentitiesAreOIB checks that every identity of the party with the
+// tax scope is its OIB, written as in its tax ID. gobl.ubl writes each as a
+// tax registration (BT-32) as it is, and a Croatian seller has only its OIB
+// to give there: HR-BR-53 requires a valid OIB, and UBL-SR-13 allows one tax
+// registration. A party with no OIB passes, as the rules that require one
+// say what is missing.
+func taxScopeIdentitiesAreOIB(val any) bool {
+	p, ok := val.(*org.Party)
+	if !ok || p == nil {
+		return true
+	}
+	oib := PartyOIB(p)
+	if oib == cbc.CodeEmpty {
+		return true
+	}
+	for _, id := range p.Identities {
+		if id != nil && id.Scope == org.IdentityScopeTax && id.Code != oib {
+			return false
+		}
+	}
+	return true
+}
+
 // partyHasTaxIDCode checks that the party's tax ID has a code.
 func partyHasTaxIDCode(val any) bool {
 	p, ok := val.(*org.Party)

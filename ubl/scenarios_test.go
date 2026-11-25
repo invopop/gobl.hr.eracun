@@ -352,6 +352,28 @@ var scenarios = []scenario{
 		inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
 		inv.Supplier.Inboxes = []*org.Inbox{{Scheme: "9934", Code: "12345678903"}}
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-15"},
+	{name: "issuer with a foreign tax ID and an OIB identity", edit: func(inv *bill.Invoice) {
+		inv.Supplier.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
+		inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-39"},
+
+	// A Croatian seller's only tax registration (BT-32) is its OIB: gobl.ubl
+	// writes every identity with the tax scope there.
+	{name: "issuer outside VAT giving its OIB as a tax registration too", edit: func(inv *bill.Invoice) {
+		inv.Supplier = supplierOutsideVAT()
+		inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "12345678903"}}
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, "")}
+		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
+	}},
+	{name: "issuer with a tax registration that is not an OIB", edit: func(inv *bill.Invoice) {
+		inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "XYZ123"}}
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-40", rule: "HR-BR-53"},
+	{name: "issuer outside VAT with another party's OIB as a tax registration", edit: func(inv *bill.Invoice) {
+		inv.Supplier = supplierOutsideVAT()
+		inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "11111111119"}}
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, "")}
+		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
+	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-40", rule: "UBL-SR-13"},
 
 	// Not subject to VAT (O): BR-O-02 forbids the seller's and the buyer's
 	// VAT identifiers. The export leaves the seller's out; the buyer gives

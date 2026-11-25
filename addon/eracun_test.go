@@ -90,6 +90,28 @@ func TestInvoiceValid(t *testing.T) {
 	assert.Equal(t, eracun.TaxLabelPDV25, inv.Lines[0].Taxes[0].Ext.Get(eracun.ExtKeyTaxCategory))
 }
 
+// TestInvoiceSupplierTaxRegistration checks that a supplier may give its OIB
+// as a tax registration too.
+func TestInvoiceSupplierTaxRegistration(t *testing.T) {
+	inv := testInvoice()
+	inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "12345678903"}}
+	require.NoError(t, inv.Calculate())
+	assert.NoError(t, rules.Validate(inv))
+}
+
+// TestInvoiceSupplierTaxRegistrationWithoutOIB checks that a supplier with no
+// OIB is told so, and not that its tax registration differs from it.
+func TestInvoiceSupplierTaxRegistrationWithoutOIB(t *testing.T) {
+	inv := testInvoice()
+	inv.Supplier.TaxID = &tax.Identity{Country: "HR"}
+	inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
+	inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "12345678903"}}
+	require.NoError(t, inv.Calculate())
+	faults := rules.Validate(inv)
+	assert.True(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-15"), faults)
+	assert.False(t, faults.HasCode("GOBL-HR-ERACUN-BILL-INVOICE-40"), faults)
+}
+
 func TestInvoiceRules(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -218,6 +240,19 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Supplier.TaxID = nil
 			inv.Supplier.Endpoints = []*org.Endpoint{{URI: "iso6523-actorid-upis::9934:12345678903"}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-15"},
+		{"supplier with a foreign tax ID and an OIB identity", func(inv *bill.Invoice) {
+			inv.Supplier.TaxID = &tax.Identity{Country: "DE", Code: "111111125"}
+			inv.Supplier.Identities = []*org.Identity{{Type: hr.IdentityTypeOIB, Code: "12345678903"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-39"},
+		{"supplier tax registration that is not an OIB", func(inv *bill.Invoice) {
+			inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "XYZ123"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-40"},
+		{"supplier tax registration with its OIB written with separators", func(inv *bill.Invoice) {
+			inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "HR 1234-5678-903"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-40"},
+		{"supplier tax registration with another party's OIB", func(inv *bill.Invoice) {
+			inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "11111111119"}}
+		}, "GOBL-HR-ERACUN-BILL-INVOICE-40"},
 		{"customer VAT number with an O line", func(inv *bill.Invoice) {
 			outsideVAT(inv)
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}}

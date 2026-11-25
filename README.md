@@ -253,8 +253,12 @@ supplier:
 | `registered` | is registered for VAT | its VAT identifier (BT-31), `HR<OIB>` |
 | `not-registered` | is not, such as a small taxpayer | its tax registration (BT-32) with the scheme `FRE` and its legal registration (BT-30), as in the official example "eRacun-Nije u sustavu PDV" |
 
-An invoice without the extension, or whose supplier `tax_id` has no code, is
-rejected. A supplier that is not registered must not charge VAT. An invoice
+An invoice without the extension, or whose supplier `tax_id` has no code or
+is not Croatian, is rejected. So is a supplier identity with the `tax` scope
+that is not the supplier's OIB, written as in its `tax_id`: the export writes
+it as a tax registration (BT-32) as it is, and a Croatian seller has one, a
+valid OIB (HR-BR-53, UBL-SR-13). A
+supplier that is not registered must not charge VAT. An invoice
 with an amount not subject to VAT (O) shows no VAT identifier (BR-O-02), so
 on one the export leaves out a registered supplier's VAT identifier and
 writes its OIB as its legal registration alone, as in the official example

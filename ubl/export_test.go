@@ -797,19 +797,61 @@ func TestImportSellerOnOutsideScopeInvoice(t *testing.T) {
 	assert.Equal(t, "12345678903", p.PartyLegalEntity.CompanyID.Value)
 }
 
-// TestSellerOutsideVATKeepsOIBInTaxRegistration checks that the OIB is the
-// seller's tax registration (BT-32) even when it has another identity with
-// the tax scope.
-func TestSellerOutsideVATKeepsOIBInTaxRegistration(t *testing.T) {
+// TestSellerOutsideVATKeepsOtherTaxRegistrations checks that only the
+// seller's OIB gets the FRE scheme. The addon refuses another tax
+// registration (HR-BR-53, UBL-SR-13), so this invoice is exported without
+// being validated: the other registration keeps the scheme gobl.ubl gave it.
+func TestSellerOutsideVATKeepsOtherTaxRegistrations(t *testing.T) {
 	inv := outsideVATInvoice()
 	inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "XYZ123"}}
-	doc := exportTestInvoice(t, inv)
-	var ids []string
-	for _, pts := range doc.AccountingSupplierParty.Party.PartyTaxScheme {
-		assert.Equal(t, "FRE", pts.TaxScheme.ID.Value)
-		ids = append(ids, pts.CompanyID.Value)
+	env, err := gobl.Envelop(inv)
+	require.NoError(t, err)
+	require.NoError(t, env.Calculate())
+	require.ErrorContains(t, env.Validate(), "GOBL-HR-ERACUN-BILL-INVOICE-40")
+	out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+	require.NoError(t, err)
+	schemes := make(map[string]string)
+	for _, pts := range out.(*goblubl.Invoice).AccountingSupplierParty.Party.PartyTaxScheme {
+		schemes[pts.CompanyID.Value] = pts.TaxScheme.ID.Value
 	}
-	assert.Contains(t, ids, "12345678903")
+	assert.Equal(t, map[string]string{"XYZ123": "LOC", "12345678903": "FRE"}, schemes)
+}
+
+// TestSellerOutsideVATWithOIBTaxRegistration checks that a seller outside
+// the VAT system that gives its OIB as a tax registration too gets one tax
+// registration (UBL-SR-13), with the FRE scheme.
+func TestSellerOutsideVATWithOIBTaxRegistration(t *testing.T) {
+	inv := outsideVATInvoice()
+	inv.Supplier.Identities = []*org.Identity{{Scope: org.IdentityScopeTax, Code: "12345678903"}}
+	p := exportTestInvoice(t, inv).AccountingSupplierParty.Party
+	require.Len(t, p.PartyTaxScheme, 1)
+	assert.Equal(t, "12345678903", p.PartyTaxScheme[0].CompanyID.Value)
+	assert.Equal(t, "FRE", p.PartyTaxScheme[0].TaxScheme.ID.Value)
+}
+
+// TestSellerWithOutsideScopeAmountsAndOIBTaxRegistration checks that a seller
+// registered for VAT that gives its OIB as a tax registration too shows no
+// tax registration on an invoice with an amount not subject to VAT (O). A
+// tax registration (BT-32) is what says a seller isn't registered, so the
+// seller comes back registered.
+func TestSellerWithOutsideScopeAmountsAndOIBTaxRegistration(t *testing.T) {
+	inv := scenarioInvoice()
+	inv.Customer = customerWithoutVATNumber()
+	inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, "")}
+	addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
+	inv.Supplier.Identities = append(inv.Supplier.Identities, &org.Identity{Scope: org.IdentityScopeTax, Code: "12345678903"})
+	doc := exportTestInvoice(t, inv)
+	p := doc.AccountingSupplierParty.Party
+	assert.Empty(t, p.PartyTaxScheme)
+	assert.Equal(t, "12345678903", p.PartyLegalEntity.CompanyID.Value)
+
+	data, err := goblubl.Encode(doc)
+	require.NoError(t, err)
+	in, err := goblubl.Decode(data)
+	require.NoError(t, err)
+	env, err := goblubl.Import(in)
+	require.NoError(t, err)
+	assert.True(t, eracun.RegisteredForVAT(env.Extract().(*bill.Invoice).Supplier))
 }
 
 // TestSellerOutsideVATBesideLegalID checks a seller whose legal registration

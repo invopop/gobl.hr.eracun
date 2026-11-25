@@ -196,19 +196,31 @@ func exportSellerTaxRegistration(inv *bill.Invoice, out *goblubl.Invoice) {
 	if !notRegistered && !hasOutsideScopeRate(vatTotal(inv)) {
 		return
 	}
-	p.PartyTaxScheme = slices.DeleteFunc(p.PartyTaxScheme, func(pts goblubl.PartyTaxScheme) bool {
-		return pts.TaxScheme != nil && pts.TaxScheme.ID.Value == goblubl.TaxSchemeVAT
-	})
+	// The VAT identifier goes. So does a tax registration that repeats the
+	// OIB, unless it is the one of a seller outside the VAT system, which
+	// gets the FRE scheme: a seller registered for VAT has its OIB in its
+	// legal registration, as a tax registration without a VAT identifier
+	// says a seller isn't registered. On an invoice that shows the VAT
+	// identifier, the function has returned and a tax registration with the
+	// OIB stays beside it, which says nothing about the status. Any other
+	// tax registration keeps its scheme; the addon refuses it (HR-BR-53).
 	oib := eracun.PartyOIB(inv.Supplier)
 	written := false
+	kept := p.PartyTaxScheme[:0]
 	for _, pts := range p.PartyTaxScheme {
-		if pts.TaxScheme != nil {
-			pts.TaxScheme.ID.Value = taxSchemeOutsideVAT
+		if pts.TaxScheme != nil && pts.TaxScheme.ID.Value == goblubl.TaxSchemeVAT {
+			continue
 		}
-		if pts.CompanyID != nil && eracun.NormalizeOIB(pts.CompanyID.Value) == oib {
+		if oib != cbc.CodeEmpty && pts.CompanyID != nil && eracun.NormalizeOIB(pts.CompanyID.Value) == oib {
+			if !notRegistered {
+				continue
+			}
+			pts.TaxScheme = &goblubl.TaxScheme{ID: goblubl.IDType{Value: taxSchemeOutsideVAT}}
 			written = true
 		}
+		kept = append(kept, pts)
 	}
+	p.PartyTaxScheme = kept
 	if oib == cbc.CodeEmpty {
 		return
 	}
