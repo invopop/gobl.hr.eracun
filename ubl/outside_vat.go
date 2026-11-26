@@ -88,8 +88,9 @@ func outsideVATTaxCategory(label cbc.Code) *goblubl.TaxCategory {
 // entry for it.
 //
 // A charge's exemption reason text (HR-BT-7) is its own reason (BT-104), the
-// name of the fee or tax, as the official examples have it. A line has none.
-// A text kept on import is written back in either.
+// name of the fee or tax, without the HR tax category the official examples
+// start that reason with: "#HR:PP#Porez na potrošnju" gives "Porez na
+// potrošnju", as they have it. A line has no text.
 //
 // Their amounts join the one exempt entry EN 16931 allows in the VAT
 // breakdown (BR-E-01): the entry added here comes after those of gobl.ubl,
@@ -114,11 +115,6 @@ func exportAmountsOutsideVAT(inv *bill.Invoice, out *goblubl.Invoice) error {
 			TaxExemptionReasonCode: tc.TaxExemptionReasonCode,
 			TaxScheme:              tc.TaxScheme,
 		}
-		if l.Item != nil {
-			if reason, ok := l.Item.Meta[MetaKeyTaxExemptionReason]; ok {
-				ctc.TaxExemptionReason = &reason
-			}
-		}
 		lines[i].Item.ClassifiedTaxCategory = ctc
 		sum = sum.Add(*l.Total)
 	}
@@ -126,11 +122,10 @@ func exportAmountsOutsideVAT(inv *bill.Invoice, out *goblubl.Invoice) error {
 		if c.charge == nil || !eracun.ChargeOutsideVAT(c.charge) {
 			return
 		}
-		tc := outsideVATTaxCategory(c.charge.Ext.Get(eracun.ExtKeyTaxCategory))
-		if reason, ok := c.charge.Meta[MetaKeyTaxExemptionReason]; ok {
+		label := c.charge.Ext.Get(eracun.ExtKeyTaxCategory)
+		tc := outsideVATTaxCategory(label)
+		if reason := strings.TrimPrefix(c.charge.Reason, "#"+taxCategoryPrefix+label.String()+"#"); reason != "" {
 			tc.TaxExemptionReason = &reason
-		} else if c.charge.Reason != "" {
-			tc.TaxExemptionReason = ptr(c.charge.Reason)
 		}
 		ac.TaxCategory = []*goblubl.TaxCategory{tc}
 		sum = sum.Add(c.charge.Amount)
@@ -164,8 +159,8 @@ func exemptNote(inv *bill.Invoice) *tax.Note {
 // amount left out of the VAT base: HR:POVNAK, HR:PP, HR:PPMV or HR:N. The
 // exempt VAT combo gobl.ubl read for each is the HR CIUS encoding, so it
 // goes, and the line or charge carries the HR tax category in its own
-// extensions. An exemption reason text the export wouldn't write back is kept
-// in its meta data.
+// extensions. Its exemption reason text is not kept: the export derives a
+// charge's from its reason, and a line has none.
 //
 // A document level allowance named that way can't be read as one: GOBL has
 // no discount without taxes (BR-32). Its VAT combo gets the HR tax category,
@@ -184,11 +179,6 @@ func importAmountsOutsideVAT(in *goblubl.Invoice, inv *bill.Invoice, lines []gob
 		}
 		l.Taxes = nil
 		l.Ext = l.Ext.Set(eracun.ExtKeyTaxCategory, label)
-		if ctc.TaxExemptionReason != nil && l.Item != nil {
-			if reason := goblubl.CleanString(*ctc.TaxExemptionReason); reason != "" {
-				keepExemptionReason(&l.Item.Meta, reason)
-			}
-		}
 	}
 	documentCharges(in, inv, func(ac *goblubl.AllowanceCharge, c documentCharge) {
 		for _, cat := range ac.TaxCategory {
@@ -207,11 +197,6 @@ func importAmountsOutsideVAT(in *goblubl.Invoice, inv *bill.Invoice, lines []gob
 			}
 			c.charge.Taxes = nil
 			c.charge.Ext = c.charge.Ext.Set(eracun.ExtKeyTaxCategory, label)
-			if cat.TaxExemptionReason != nil {
-				if reason := goblubl.CleanString(*cat.TaxExemptionReason); reason != "" && reason != c.charge.Reason {
-					keepExemptionReason(&c.charge.Meta, reason)
-				}
-			}
 			return
 		}
 	})

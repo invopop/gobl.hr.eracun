@@ -234,7 +234,10 @@ func leafDiff(a, b []leaf) (onlyA, onlyB []leaf) {
 //     which gobl.ubl writes for every format;
 //   - the pass-through VATEX code, which the export gives every amount left
 //     out of the VAT base, where the original may state its reason in words
-//     only (see addedPassThroughCode).
+//     only (see addedPassThroughCode);
+//   - the exemption reason text of a line left out of the VAT base that only
+//     repeats its HR tax category and item name, which the export keeps
+//     (see derivedLineReason).
 func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 	other := original
 	if lost {
@@ -253,6 +256,8 @@ func acceptedDifference(l leaf, lost bool, original, exported []leaf) bool {
 		return slices.ContainsFunc(other, func(o leaf) bool { return o.path == l.path })
 	case strings.HasSuffix(l.path, "/cbc:TaxExemptionReasonCode"):
 		return !lost && addedPassThroughCode(l, exported)
+	case strings.HasSuffix(l.path, "/cac:ClassifiedTaxCategory/cbc:TaxExemptionReason"):
+		return lost && derivedLineReason(l, original)
 	case strings.HasSuffix(l.path, "/cac:PartyName/cbc:Name") && !lost:
 		legal := strings.TrimSuffix(l.path, "/cac:PartyName/cbc:Name") + "/cac:PartyLegalEntity/cbc:RegistrationName"
 		if hasLeaf(original, leaf{legal, l.value}) {
@@ -285,8 +290,29 @@ func addedPassThroughCode(l leaf, exported []leaf) bool {
 		return false
 	}
 	return slices.ContainsFunc(exported, func(o leaf) bool {
-		return o.path == name && slices.Contains([]string{"HR:POVNAK", "HR:PP", "HR:PPMV", "HR:N"}, o.value)
+		return o.path == name && slices.Contains(passThroughCategories, o.value)
 	})
+}
+
+// passThroughCategories name the HR tax categories of the amounts left out
+// of the VAT base.
+var passThroughCategories = []string{"HR:POVNAK", "HR:PP", "HR:PPMV", "HR:N"}
+
+// derivedLineReason reports a line's exemption reason text that only repeats
+// the HR tax category and item name of a line left out of the VAT base, such
+// as "#HR:POVNAK#Povratna naknada" in the official example of a deposit
+// line. The export writes no text for such a line.
+func derivedLineReason(l leaf, original []leaf) bool {
+	item := strings.TrimSuffix(l.path, "cac:ClassifiedTaxCategory/cbc:TaxExemptionReason")
+	for _, c := range original {
+		if c.path != item+"cac:ClassifiedTaxCategory/cbc:Name" || !slices.Contains(passThroughCategories, c.value) {
+			continue
+		}
+		if name, ok := strings.CutPrefix(l.value, "#"+c.value+"#"); ok && hasLeaf(original, leaf{item + "cbc:Name", name}) {
+			return true
+		}
+	}
+	return false
 }
 
 func isOne(v string) bool {
@@ -382,4 +408,19 @@ func TestAcceptedPassThroughCode(t *testing.T) {
 	assert.False(t, acceptedDifference(row, false, nil, exemptCharge), "on the breakdown beside an exempt charge")
 
 	assert.False(t, acceptedDifference(code(line(2)), true, deposit, nil), "a lost code is never accepted")
+}
+
+// TestAcceptedDerivedLineReason checks that the fidelity test lets the export
+// leave out a line's exemption reason text only where it repeats the HR tax
+// category and item name of a line left out of the VAT base.
+func TestAcceptedDerivedLineReason(t *testing.T) {
+	const line = "/Invoice/cac:InvoiceLine[2]/cac:Item/"
+	reason := func(v string) leaf { return leaf{line + "cac:ClassifiedTaxCategory/cbc:TaxExemptionReason", v} }
+	doc := func(category string) []leaf {
+		return []leaf{{line + "cbc:Name", "Povratna naknada"}, {line + "cac:ClassifiedTaxCategory/cbc:Name", category}}
+	}
+	assert.True(t, acceptedDifference(reason("#HR:POVNAK#Povratna naknada"), true, doc("HR:POVNAK"), nil), "the deposit line's text")
+	assert.False(t, acceptedDifference(reason("Povratna naknada za ambalažu"), true, doc("HR:POVNAK"), nil), "a text of its own")
+	assert.False(t, acceptedDifference(reason("#HR:E#Povratna naknada"), true, doc("HR:E"), nil), "an exempt line with VAT")
+	assert.False(t, acceptedDifference(reason("#HR:POVNAK#Povratna naknada"), false, nil, doc("HR:POVNAK")), "an added text")
 }

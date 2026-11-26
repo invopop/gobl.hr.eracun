@@ -34,8 +34,6 @@ func importHR(_ *goblubl.Format, doc goblubl.Document, env *gobl.Envelope) error
 		return err
 	}
 	importAmountsOutsideVAT(in, inv, lines)
-	importChargeExemptionReasons(in, inv)
-	importLineExemptionReasons(inv, lines)
 
 	data, err := FindHRFISK20Data(in)
 	if err != nil {
@@ -99,63 +97,6 @@ func importPaymentMeansText(in *goblubl.Invoice, inv *bill.Invoice) {
 	}
 	if len(notes) > 0 {
 		inv.Payment.Instructions.Detail = strings.Join(notes, "\n")
-	}
-}
-
-// MetaKeyTaxExemptionReason keeps the VAT exemption reason text of a received
-// document level charge or allowance (HR-BT-7), in its meta data, or line
-// (HR-BT-13), in its item's, when the export wouldn't write that text back:
-// the text of the VAT note for a taxed one, the charge's own reason for a
-// charge left out of the VAT base, and none for such a line. The export
-// writes a kept text instead. An issuer gives the reason as the VATEX code of
-// the tax combo.
-const MetaKeyTaxExemptionReason cbc.Key = "hr-eracun-tax-exemption-reason"
-
-// importChargeExemptionReasons keeps the exemption reasons of the document
-// level charges and allowances that the export wouldn't give back. GOBL has
-// one exemption note per tax category, and no field for the reason of a
-// single charge or allowance. The Tax Administration receives a charge's
-// reason on fiscalization.
-func importChargeExemptionReasons(in *goblubl.Invoice, inv *bill.Invoice) {
-	documentCharges(in, inv, func(ac *goblubl.AllowanceCharge, c documentCharge) {
-		tc := c.taxes.Get(tax.CategoryVAT)
-		if tc == nil {
-			return
-		}
-		for _, cat := range ac.TaxCategory {
-			if cat == nil || cat.TaxScheme == nil || cat.TaxScheme.ID.Value != goblubl.TaxSchemeVAT || cat.TaxExemptionReason == nil {
-				continue
-			}
-			reason := goblubl.CleanString(*cat.TaxExemptionReason)
-			if r, ok := exemptionReason(inv, tc.Ext); reason == "" || (ok && r == reason) {
-				continue
-			}
-			keepExemptionReason(c.meta, reason)
-		}
-	})
-}
-
-// importLineExemptionReasons keeps the exemption reasons of the lines that
-// the export wouldn't give back. The export only writes a reason of its own
-// for categories E and O (HR-BR-16, HR-BR-36).
-func importLineExemptionReasons(inv *bill.Invoice, lines []goblubl.InvoiceLine) {
-	for i, l := range lines {
-		if inv.Lines[i] == nil || inv.Lines[i].Item == nil || l.Item == nil || l.Item.ClassifiedTaxCategory == nil {
-			continue
-		}
-		ctc := l.Item.ClassifiedTaxCategory
-		tc := inv.Lines[i].Taxes.Get(tax.CategoryVAT)
-		if tc == nil || ctc.TaxExemptionReason == nil {
-			continue
-		}
-		reason := goblubl.CleanString(*ctc.TaxExemptionReason)
-		if reason == "" {
-			continue
-		}
-		if r, ok := exemptionReason(inv, tc.Ext); ok && r == reason && tc.Ext.Get(untdid.ExtKeyTaxCategory).In(reasonRequiredCategories...) {
-			continue
-		}
-		keepExemptionReason(&inv.Lines[i].Item.Meta, reason)
 	}
 }
 

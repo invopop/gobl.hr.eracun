@@ -15,13 +15,6 @@ import (
 // (HR-BR-13, HR-BR-36): the export writes exemptionReason for them.
 var reasonRequiredCategories = []cbc.Code{en16931.TaxCategoryExempt, en16931.TaxCategoryOutsideScope}
 
-// reasonAllowedCategories are the EN 16931 VAT categories that may carry an
-// exemption reason: a reason kept on import is written back for them.
-var reasonAllowedCategories = []cbc.Code{
-	en16931.TaxCategoryExempt, en16931.TaxCategoryReverseCharge, en16931.TaxCategoryIntraCommunity,
-	en16931.TaxCategoryExport, en16931.TaxCategoryOutsideScope,
-}
-
 // invoices provides the GOBL and UBL invoices of an export or import, if
 // both are invoices.
 func invoices(env *gobl.Envelope, doc goblubl.Document) (*bill.Invoice, *goblubl.Invoice, bool) {
@@ -49,11 +42,10 @@ func pairedLines(inv *bill.Invoice, doc *goblubl.Invoice) ([]goblubl.InvoiceLine
 }
 
 // documentCharge is the GOBL side of a document level charge or allowance:
-// its taxes and meta data, and the charge itself when it is one.
+// its taxes, and the charge itself when it is one.
 type documentCharge struct {
 	charge *bill.Charge
 	taxes  tax.Set
-	meta   *cbc.Meta
 }
 
 // documentCharges calls fn with each document level charge and allowance of
@@ -69,23 +61,22 @@ func documentCharges(doc *goblubl.Invoice, inv *bill.Invoice, fn func(ac *goblub
 		if ac.ChargeIndicator {
 			if charges < len(inv.Charges) && inv.Charges[charges] != nil {
 				c := inv.Charges[charges]
-				fn(ac, documentCharge{charge: c, taxes: c.Taxes, meta: &c.Meta})
+				fn(ac, documentCharge{charge: c, taxes: c.Taxes})
 			}
 			charges++
 			continue
 		}
 		if discounts < len(inv.Discounts) && inv.Discounts[discounts] != nil {
 			d := inv.Discounts[discounts]
-			fn(ac, documentCharge{taxes: d.Taxes, meta: &d.Meta})
+			fn(ac, documentCharge{taxes: d.Taxes})
 		}
 		discounts++
 	}
 }
 
 // exemptionReason provides the exemption reason text the export writes for
-// a line or a document level charge or allowance with these VAT extensions,
-// unless MetaKeyTaxExemptionReason gives one of its own: the text of the VAT
-// note for its category.
+// a line or a document level charge or allowance with these VAT extensions:
+// the text of the VAT note for its category.
 func exemptionReason(inv *bill.Invoice, ext tax.Extensions) (string, bool) {
 	if n := taxNote(inv, ext); n != nil {
 		return n.Text, true
@@ -95,8 +86,7 @@ func exemptionReason(inv *bill.Invoice, ext tax.Extensions) (string, bool) {
 
 // taxNote provides the VAT note with the exemption reason of the EN 16931
 // tax category, the way gobl.ubl finds it for the tax breakdown. GOBL has one
-// note per category, so every exempt line and charge shares one reason text:
-// a reason of its own is kept under MetaKeyTaxExemptionReason.
+// note per category, so every exempt line and charge shares one reason text.
 func taxNote(inv *bill.Invoice, ext tax.Extensions) *tax.Note {
 	cat := ext.Get(untdid.ExtKeyTaxCategory)
 	if inv.Tax == nil || cat == cbc.CodeEmpty {
@@ -117,13 +107,4 @@ func setTaxExt(inv *bill.Invoice, key cbc.Key, value cbc.Code) {
 		inv.Tax = new(bill.Tax)
 	}
 	inv.Tax.Ext = inv.Tax.Ext.Set(key, value)
-}
-
-// keepExemptionReason keeps a received exemption reason text in the meta data
-// of the line's item, or of the charge or discount, it came on.
-func keepExemptionReason(meta *cbc.Meta, reason string) {
-	if *meta == nil {
-		*meta = make(cbc.Meta)
-	}
-	(*meta)[MetaKeyTaxExemptionReason] = reason
 }

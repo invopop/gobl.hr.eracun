@@ -170,14 +170,15 @@ text the export writes on the breakdown entry and on every line and charge of
 that category. Each exempt category needs the code or the note.
 
 An amount left out of the VAT base needs neither: the export gives it the
-code `VATEX-EU-79-C`, and a charge its own `reason` as the text. That code
-shows in the VAT breakdown only on an invoice with no exempt supply; beside
-one, the exempt entry states the supply's ground.
+code `VATEX-EU-79-C`, and a charge its own `reason` as the text, without the
+HR tax category the official examples start that reason with
+(`#HR:PP#Porez na potrošnju` gives `Porez na potrošnju`). A line gets no
+text. That code shows in the VAT breakdown only on an invoice with no exempt
+supply; beside one, the exempt entry states the supply's ground.
 
-Importing an eRačun keeps a reason text that the export wouldn't write back
-in the meta `hr-eracun-tax-exemption-reason` of the line's item, or of the
-charge or discount, and the export writes a kept text again. That meta is
-not an input: an issuer gives the reason as above.
+Importing an eRačun keeps no reason text of its own: a received line or
+charge whose text differs from the one the export writes gets the export's
+text, or none, when it is converted back.
 
 ## Consumption tax (PP)
 

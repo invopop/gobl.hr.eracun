@@ -129,9 +129,6 @@
 			"amount": "2000.00",
 			"ext": {
 				"hr-eracun-tax-category": "PPMV"
-			},
-			"meta": {
-				"hr-eracun-tax-exemption-reason": "Posebni porez na motorna vozila"
 			}
 		}
 	],

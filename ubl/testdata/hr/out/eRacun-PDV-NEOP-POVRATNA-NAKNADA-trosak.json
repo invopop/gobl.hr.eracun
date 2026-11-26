@@ -129,9 +129,6 @@
 			"amount": "5.00",
 			"ext": {
 				"hr-eracun-tax-category": "POVNAK"
-			},
-			"meta": {
-				"hr-eracun-tax-exemption-reason": "Povratna naknada"
 			}
 		}
 	],

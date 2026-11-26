@@ -487,10 +487,10 @@ func TestSellerContactPoint(t *testing.T) {
 	})
 }
 
-// TestChargeExemptionReason checks that the exemption reason of a document
-// level charge or allowance (HR-BT-7) is kept when the export wouldn't give
-// it back, and only then. A charge left out of the VAT base gets its own
-// reason (BT-104) as its exemption reason.
+// TestChargeExemptionReason checks the exemption reason text (HR-BT-7) of a
+// charge left out of the VAT base: its own reason (BT-104), without the HR
+// tax category the official examples start it with (#HR:PP#). The export
+// derives that text, so the import keeps nothing to write it back.
 func TestChargeExemptionReason(t *testing.T) {
 	importExample := func(t *testing.T, edit func(string) string) *bill.Invoice {
 		t.Helper()
@@ -502,29 +502,38 @@ func TestChargeExemptionReason(t *testing.T) {
 		require.NoError(t, err)
 		return env.Extract().(*bill.Invoice)
 	}
-	t.Run("differs from the charge's reason", func(t *testing.T) {
-		// The official example: "#HR:PP#Porez na potrošnju" as the charge's
-		// reason, "Porez na potrošnju" as its exemption reason.
+	t.Run("official example", func(t *testing.T) {
+		// "#HR:PP#Porez na potrošnju" as the charge's reason, "Porez na
+		// potrošnju" as its exemption reason.
 		inv := importExample(t, func(s string) string { return s })
-		assert.Equal(t, "Porez na potrošnju", inv.Charges[0].Meta[hrubl.MetaKeyTaxExemptionReason])
+		assert.Equal(t, "#HR:PP#Porez na potrošnju", inv.Charges[0].Reason)
+		assert.Empty(t, inv.Charges[0].Meta)
 		doc := exportTestInvoice(t, inv)
 		assert.Equal(t, "#HR:PP#Porez na potrošnju", *doc.AllowanceCharge[0].AllowanceChargeReason)
 		assert.Equal(t, "Porez na potrošnju", *doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
 	})
-	t.Run("same as the charge's reason", func(t *testing.T) {
+	t.Run("reason without the category", func(t *testing.T) {
 		inv := importExample(t, func(s string) string {
 			return strings.Replace(s, "<cbc:AllowanceChargeReason>#HR:PP#Porez na potrošnju<", "<cbc:AllowanceChargeReason>Porez na potrošnju<", 1)
 		})
-		assert.Empty(t, inv.Charges[0].Meta)
-	})
-	t.Run("discount", func(t *testing.T) {
-		inv := testInvoice()
-		inv.Discounts[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyExempt}}
-		inv.Discounts[0].Meta = cbc.Meta{hrubl.MetaKeyTaxExemptionReason: "Popust na oslobođenu isporuku"}
 		doc := exportTestInvoice(t, inv)
-		require.Len(t, doc.AllowanceCharge, 2)
-		assert.False(t, doc.AllowanceCharge[1].ChargeIndicator)
-		assert.Equal(t, "Popust na oslobođenu isporuku", *doc.AllowanceCharge[1].TaxCategory[0].TaxExemptionReason)
+		assert.Equal(t, "Porez na potrošnju", *doc.AllowanceCharge[0].AllowanceChargeReason)
+		assert.Equal(t, "Porez na potrošnju", *doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
+	})
+	t.Run("issuer's reason with the category", func(t *testing.T) {
+		inv := testInvoice()
+		inv.Charges[0].Reason = "#HR:PP#Porez na potrošnju"
+		doc := exportTestInvoice(t, inv)
+		assert.Equal(t, "#HR:PP#Porez na potrošnju", *doc.AllowanceCharge[0].AllowanceChargeReason)
+		assert.Equal(t, "Porez na potrošnju", *doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
+	})
+	t.Run("another category", func(t *testing.T) {
+		// Only the charge's own HR tax category is taken off: here the
+		// reason names N on a PP charge, so it is written as it is.
+		inv := testInvoice()
+		inv.Charges[0].Reason = "#HR:N#Turistička pristojba"
+		doc := exportTestInvoice(t, inv)
+		assert.Equal(t, "#HR:N#Turistička pristojba", *doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
 	})
 }
 
@@ -638,28 +647,42 @@ func partyIDs(p *goblubl.Party) []goblubl.IDType {
 	return ids
 }
 
-// TestLineExemptionReason checks that a line's exemption reason (HR-BT-13)
-// that isn't the VAT breakdown's comes back.
+// TestLineExemptionReason checks that the import keeps no exemption reason
+// text (HR-BT-13) of a line, which the export can't write back: none for a
+// line left out of the VAT base, as for one an issuer writes, and the VAT
+// note's text for an exempt line with VAT.
 func TestLineExemptionReason(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("testdata", "hr", "eRacun-PDV-NEOP-POVRATNA-NAKNADA-stavka.xml"))
-	require.NoError(t, err)
-	i := strings.LastIndex(string(data), "#HR:POVNAK#Povratna naknada")
-	require.Positive(t, i)
-	data = []byte(string(data[:i]) + "Povratna naknada za ambalažu" + string(data[i+len("#HR:POVNAK#Povratna naknada"):]))
-	doc, err := goblubl.Decode(data)
-	require.NoError(t, err)
-	env, err := goblubl.Import(doc)
-	require.NoError(t, err)
-	inv := env.Extract().(*bill.Invoice)
-	assert.Equal(t, "Povratna naknada za ambalažu", inv.Lines[1].Item.Meta[hrubl.MetaKeyTaxExemptionReason])
-	assert.Empty(t, inv.Lines[0].Item.Meta)
-
-	require.NoError(t, env.Calculate())
-	out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
-	require.NoError(t, err)
-	ctc := out.(*goblubl.Invoice).InvoiceLines[1].Item.ClassifiedTaxCategory
-	assert.Equal(t, "Povratna naknada za ambalažu", *ctc.TaxExemptionReason)
-	assert.Equal(t, "#HR:POVNAK#Povratna naknada", *out.(*goblubl.Invoice).TaxTotal[0].TaxSubtotal[1].TaxCategory.TaxExemptionReason)
+	roundTrip := func(t *testing.T, example string, edit func(string) string) (*bill.Invoice, *goblubl.Invoice) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join("testdata", "hr", example+".xml"))
+		require.NoError(t, err)
+		doc, err := goblubl.Decode([]byte(edit(string(data))))
+		require.NoError(t, err)
+		env, err := goblubl.Import(doc)
+		require.NoError(t, err)
+		require.NoError(t, env.Calculate())
+		out, err := goblubl.Export(env, goblubl.WithFormat(hrubl.FormatHRCIUS))
+		require.NoError(t, err)
+		return env.Extract().(*bill.Invoice), out.(*goblubl.Invoice)
+	}
+	t.Run("left out of the VAT base", func(t *testing.T) {
+		// The official example gives the deposit line "#HR:POVNAK#Povratna
+		// naknada": its HR tax category and item name.
+		inv, out := roundTrip(t, "eRacun-PDV-NEOP-POVRATNA-NAKNADA-stavka", func(s string) string { return s })
+		assert.Empty(t, inv.Lines[1].Item.Meta)
+		assert.Nil(t, out.InvoiceLines[1].Item.ClassifiedTaxCategory.TaxExemptionReason)
+		assert.Equal(t, "#HR:POVNAK#Povratna naknada", *out.TaxTotal[0].TaxSubtotal[1].TaxCategory.TaxExemptionReason)
+	})
+	t.Run("exempt with VAT", func(t *testing.T) {
+		const own = "Oslobođeno PDV-a, čl. 40. st. 1"
+		inv, out := roundTrip(t, "eRacun-Oslobodjeno PDV", func(s string) string {
+			i := strings.LastIndex(s, "Oslobođeno PDV čl...")
+			require.Positive(t, i)
+			return s[:i] + own + s[i+len("Oslobođeno PDV čl..."):]
+		})
+		assert.Empty(t, inv.Lines[0].Item.Meta)
+		assert.Equal(t, "Oslobođeno PDV čl...", *out.InvoiceLines[0].Item.ClassifiedTaxCategory.TaxExemptionReason)
+	})
 }
 
 // TestAmountsOutsideVATReasons checks the reasons of the amounts left out of
@@ -701,17 +724,6 @@ func TestAmountsOutsideVATReasons(t *testing.T) {
 	assert.Equal(t, "Oslobođeno PDV-a", *exemptRows[0].TaxCategory.TaxExemptionReason)
 	assert.Nil(t, exemptRows[0].TaxCategory.TaxExemptionReasonCode,
 		"the entry states the exempt service's ground, which has no code: not the deposit's code beside the service's text")
-}
-
-// TestKeptExemptionReasonNeedsExemptCategory checks that a kept exemption
-// reason is not written for a category without exemption reasons.
-func TestKeptExemptionReasonNeedsExemptCategory(t *testing.T) {
-	inv := testInvoice()
-	inv.Charges[0].Ext = tax.Extensions{}
-	inv.Charges[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Rate: tax.RateGeneral}}
-	inv.Charges[0].Meta = cbc.Meta{hrubl.MetaKeyTaxExemptionReason: "Porez na potrošnju"}
-	doc := exportTestInvoice(t, inv)
-	assert.Nil(t, doc.AllowanceCharge[0].TaxCategory[0].TaxExemptionReason)
 }
 
 // TestExportRefusesUnpairedLines checks that the export refuses an invoice

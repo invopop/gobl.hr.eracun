@@ -129,9 +129,6 @@
 			"amount": "10.00",
 			"ext": {
 				"hr-eracun-tax-category": "N"
-			},
-			"meta": {
-				"hr-eracun-tax-exemption-reason": "Turistička pristojba"
 			}
 		}
 	],
