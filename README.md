@@ -216,9 +216,11 @@ a line to the charge.
 
 The export can't write PP that has no base in the lines, so PP on a document
 level discount or charge is rejected: discount or charge the lines instead. A
-line with PP needs a VAT combo too, and a supplier not registered for VAT
-can't charge PP yet. Nor can an invoice with amounts not subject to VAT (O):
-EN 16931 allows no exempt amount beside them (BR-O-11). An invoice with the PP
+line with PP needs a VAT combo too. A supplier not registered for VAT charges
+PP on its exempt lines like any other supplier; its exempt sales and the PP
+charge then share the one exempt entry of the VAT breakdown, with the sales'
+ground. An invoice with amounts not subject to VAT (O) can't have PP: EN 16931
+allows no exempt amount beside them (BR-O-11). An invoice with the PP
 tax on its lines can't also have a line or charge without taxes with the
 category `hr-eracun-tax-category: PP`, the form received invoices carry PP
 in.

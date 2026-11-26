@@ -279,10 +279,6 @@ func billInvoiceRules() *rules.Set {
 				rules.Assert("13", "invoice from a supplier not registered for VAT (supplier ext hr-eracun-vat-status) must not charge VAT (Art. 90.g of the VAT Act)",
 					is.Func("charges no VAT", totalsChargeNoVAT),
 				),
-				// How such a supplier states PP in an eRačun is not settled yet.
-				rules.Assert("31", "invoice from a supplier not registered for VAT (supplier ext hr-eracun-vat-status) can't charge PP in an eRačun yet",
-					is.Func("charges no PP", totalsChargeNoConsumptionTax),
-				),
 			),
 		),
 		rules.When(is.Func("requires KPD", invoiceRequiresKPD),

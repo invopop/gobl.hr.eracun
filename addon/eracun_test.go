@@ -370,10 +370,6 @@ func TestInvoiceRules(t *testing.T) {
 			inv.Lines[0].Taxes = tax.Set{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope}, consumptionTax(num.MakePercentage(3, 2))}
 			inv.Tax.Notes = []*tax.Note{{Category: tax.CategoryVAT, Key: tax.KeyOutsideScope, Text: "Nije predmet oporezivanja"}}
 		}, "GOBL-HR-ERACUN-BILL-INVOICE-32"},
-		{"PP from a supplier not registered for VAT", func(inv *bill.Invoice) {
-			outsideVAT(inv)
-			inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
-		}, "GOBL-HR-ERACUN-BILL-INVOICE-31"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -913,6 +909,17 @@ func TestSupplierNotRegisteredForVAT(t *testing.T) {
 	assert.Empty(t, inv.Supplier.Identities, "the OIB stays in the tax ID")
 	require.Len(t, inv.Supplier.Endpoints, 1)
 	assert.Equal(t, cbc.URI("iso6523-actorid-upis::9934:12345678903"), inv.Supplier.Endpoints[0].URI)
+}
+
+// TestSupplierNotRegisteredForVATWithPP checks that a supplier not registered
+// for VAT may charge PP on its exempt lines, as hr-fiskal-b2c-v1 lets it.
+func TestSupplierNotRegisteredForVATWithPP(t *testing.T) {
+	inv := testInvoice()
+	outsideVAT(inv)
+	inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, consumptionTax(num.MakePercentage(3, 2)))
+	require.NoError(t, inv.Calculate())
+	require.NoError(t, rules.Validate(inv))
+	assert.NotNil(t, inv.Totals.Taxes.Category(hr.TaxCategoryPP))
 }
 
 // TestOutsideScopeWithoutVATNumbers checks that an invoice with an O amount

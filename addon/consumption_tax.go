@@ -70,11 +70,6 @@ func invoiceHasNoPassThroughPP(val any) bool {
 	return true
 }
 
-func totalsChargeNoConsumptionTax(val any) bool {
-	t, ok := val.(*bill.Totals)
-	return !ok || t == nil || t.Taxes == nil || t.Taxes.Category(hr.TaxCategoryPP) == nil
-}
-
 func invoiceHasConsumptionTax(val any) bool {
 	inv, ok := val.(*bill.Invoice)
 	if !ok || inv == nil {

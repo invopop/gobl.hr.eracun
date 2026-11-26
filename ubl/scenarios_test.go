@@ -283,6 +283,14 @@ var scenarios = []scenario{
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
 		addNote(inv, tax.KeyExempt, "Oslobođeno PDV-a")
 	}, check: lineReason(0, "Oslobođeno PDV-a")},
+	{name: "PP from an issuer outside VAT", edit: func(inv *bill.Invoice) {
+		inv.Supplier = supplierOutsideVAT()
+		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
+		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
+	},
+		// One E entry for the sale and the PP charge, with the sale's ground.
+		check: exemptRow("103.00", "", "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u"),
+	},
 	{name: "PP beside a deposit line", edit: func(inv *bill.Invoice) {
 		inv.Lines[0].Taxes = append(inv.Lines[0].Taxes, pp("3%"))
 		inv.Lines = append(inv.Lines, lineOutsideVAT("Povratna naknada", 7, eracun.TaxLabelPOVNAK))
@@ -329,11 +337,6 @@ var scenarios = []scenario{
 		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyOutsideScope, ""), pp("3%")}
 		addNote(inv, tax.KeyOutsideScope, "Nije predmet oporezivanja")
 	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-32", rule: "BR-O-11"},
-	{name: "PP from an issuer outside VAT", edit: func(inv *bill.Invoice) {
-		inv.Supplier = supplierOutsideVAT()
-		inv.Lines[0].Taxes = tax.Set{vat(tax.KeyExempt, ""), pp("3%")}
-		addNote(inv, tax.KeyExempt, "Nije u sustavu PDV čl. 90. st. 1. Zakona o PDV-u")
-	}, fault: "GOBL-HR-ERACUN-BILL-INVOICE-31"},
 
 	// An issuer not registered for VAT says so in its VAT status; its OIB
 	// stays in its tax ID.
