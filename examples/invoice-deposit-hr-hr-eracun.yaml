@@ -1,0 +1,85 @@
+$schema: "https://gobl.org/draft-0/bill/invoice"
+$regime: "HR"
+$addons: ["hr-eracun-v1"]
+uuid: "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a5"
+type: standard
+code: "4-P1-1"
+issue_date: "2026-12-01"
+issue_time: "12:00:00"
+currency: "EUR"
+tax:
+  ext:
+    hr-eracun-process: "P1"
+
+supplier:
+  name: "TVRTKA A d.o.o."
+  tax_id:
+    country: "HR"
+    code: "12345678903"
+  ext:
+    hr-eracun-vat-status: "registered"
+  people:
+    - key: operator
+      name:
+        given: "Ivan"
+        surname: "Horvat"
+      identities:
+        - type: OIB
+          code: "22222222226"
+  addresses:
+    - street: "Ulica 1"
+      locality: "Zagreb"
+      code: "10000"
+      country: "HR"
+
+customer:
+  name: "Tvrtka B d.o.o."
+  tax_id:
+    country: "HR"
+    code: "11111111119"
+  addresses:
+    - street: "Ulica 2"
+      locality: "Rijeka"
+      code: "51000"
+      country: "HR"
+
+lines:
+  - quantity: 240
+    item:
+      name: "Mineralna voda 0,5 l"
+      price: "0.50"
+      unit: piece
+      identities:
+        - label: CG
+          code: "11.07.11"
+    taxes:
+      - cat: VAT
+        rate: general
+  # The return fee on the bottles: an amount left out of the VAT base, so a
+  # line with no taxes that names its HR tax category.
+  - quantity: 240
+    item:
+      name: "Povratna naknada"
+      price: "0.10"
+      unit: piece
+      identities:
+        - label: CG
+          code: "22.22.19"
+    ext:
+      hr-eracun-tax-category: "POVNAK"
+
+# Another amount that is not taxed, as one amount: a charge with no taxes.
+# Here a cost the supplier paid in the customer's name and for its account.
+charges:
+  - reason: "Trošak plaćen u ime i za račun kupca"
+    amount: "15.00"
+
+payment:
+  terms:
+    due_dates:
+      - date: "2026-12-31"
+        percent: "100%"
+  instructions:
+    key: credit-transfer
+    credit_transfer:
+      - iban: "HR1210010051863000160"

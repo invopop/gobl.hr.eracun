@@ -1,0 +1,30 @@
+$schema: "https://gobl.org/draft-0/bill/status"
+$addons: ["hr-eracun-v1"]
+uuid: "0195ce71-dc9c-72c8-bf2c-9890a4a9f0a4"
+type: response
+code: "789"
+issue_date: "2026-12-05"
+issue_time: "15:14:35"
+
+supplier:
+  name: "TVRTKA A d.o.o."
+  inboxes:
+    - scheme: "9934"
+      code: "12345678903"
+
+customer:
+  name: "Tvrtka B d.o.o."
+  inboxes:
+    - scheme: "9934"
+      code: "11111111119"
+
+lines:
+  - key: rejected
+    doc:
+      code: "1-P1-1"
+      issue_date: "2026-12-01"
+    description: "Količina ne odgovara isporuci"
+    reasons:
+      - key: other
+        ext:
+          hr-eracun-rejection-reason: "U"

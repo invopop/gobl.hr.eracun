@@ -1,0 +1,95 @@
+$schema: "https://gobl.org/draft-0/bill/invoice"
+$regime: "HR"
+$addons: ["hr-eracun-v1"]
+uuid: "0195ce71-dc9c-72c8-bf2c-9890a4a9f0b3"
+type: standard
+code: "1-P1-2"
+issue_date: "2026-12-01"
+issue_time: "21:30:00"
+currency: "EUR"
+tax:
+  ext:
+    hr-eracun-process: "P1"
+
+supplier:
+  name: "UGOSTITELJ A d.o.o."
+  tax_id:
+    country: "HR"
+    code: "12345678903"
+  ext:
+    hr-eracun-vat-status: "registered"
+  people:
+    - key: operator
+      name:
+        given: "Ivan"
+        surname: "Horvat"
+      identities:
+        - type: OIB
+          code: "22222222226"
+  addresses:
+    - street: "Ulica 1"
+      locality: "Zagreb"
+      code: "10000"
+      country: "HR"
+
+customer:
+  name: "Tvrtka B d.o.o."
+  tax_id:
+    country: "HR"
+    code: "11111111119"
+  addresses:
+    - street: "Ulica 2"
+      locality: "Rijeka"
+      code: "51000"
+      country: "HR"
+
+# The drinks carry the consumption tax (PP) beside their VAT, at the rate
+# the city sets; the meal doesn't.
+lines:
+  - quantity: 3
+    item:
+      name: "Pivo 0,5 l"
+      price: "4.00"
+      unit: piece
+      identities:
+        - label: CG
+          code: "56.30.00"
+    taxes:
+      - cat: VAT
+        rate: general
+      - cat: PP
+        percent: "3%"
+  - quantity: 2
+    item:
+      name: "Vino 0,75 l"
+      price: "25.00"
+      unit: piece
+      identities:
+        - label: CG
+          code: "56.30.00"
+    taxes:
+      - cat: VAT
+        rate: general
+      - cat: PP
+        percent: "3%"
+  - quantity: 4
+    item:
+      name: "Ručak"
+      price: "18.00"
+      unit: piece
+      identities:
+        - label: CG
+          code: "56.11.01"
+    taxes:
+      - cat: VAT
+        rate: reduced
+
+payment:
+  terms:
+    due_dates:
+      - date: "2026-12-31"
+        percent: "100%"
+  instructions:
+    key: credit-transfer
+    credit_transfer:
+      - iban: "HR1210010051863000160"

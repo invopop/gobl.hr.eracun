@@ -1,0 +1,175 @@
+package eracun
+
+import (
+	"github.com/invopop/gobl/cbc"
+	"github.com/invopop/gobl/i18n"
+	"github.com/invopop/gobl/pkg/here"
+)
+
+// Extension keys
+const (
+	// ExtKeyProcess is the business process of the invoice (BT-23), written to
+	// the UBL ProfileID.
+	ExtKeyProcess cbc.Key = "hr-eracun-process"
+
+	// ExtKeyTaxCategory is the HR tax category (HR-TB-2) of a VAT combo, or
+	// of a line or charge without taxes, written with the "HR:" prefix to the
+	// tax category name.
+	ExtKeyTaxCategory cbc.Key = "hr-eracun-tax-category"
+
+	// ExtKeyRejectionReason is the kind of reason a buyer rejects an invoice
+	// for (AR-BT-12), the same code the buyer reports to the Tax
+	// Administration.
+	ExtKeyRejectionReason cbc.Key = "hr-eracun-rejection-reason"
+
+	// ExtKeyVATStatus says whether the supplier is registered for VAT. Its
+	// tax ID can't: every Croatian business has an OIB, and a Croatian VAT
+	// number is HR followed by the OIB.
+	//
+	// The hr-fiskal-b2c-v1 addon has the same extension under its own key.
+	// When both addons agree on it, it moves to the hr regime.
+	ExtKeyVATStatus cbc.Key = "hr-eracun-vat-status"
+)
+
+// Whether the supplier is registered for VAT (ExtKeyVATStatus)
+const (
+	// VATStatusRegistered marks a supplier registered for VAT, whose OIB is
+	// written as its VAT identifier (BT-31).
+	VATStatusRegistered cbc.Code = "registered"
+	// VATStatusNotRegistered marks a supplier not registered for VAT, such as
+	// a small taxpayer, whose OIB is written as its tax registration (BT-32).
+	VATStatusNotRegistered cbc.Code = "not-registered"
+)
+
+// HR VAT category labels (HR-TB-2, "HR oznaka kategorije PDV-a"), the codes of
+// the ExtKeyTaxCategory extension. The first nine are the VAT categories, set
+// on a VAT combo from its key and rate. POVNAK, PPMV and N are not VAT
+// categories: they name an amount left out of the VAT base, in the extensions
+// of the line or charge without taxes that carries it. PP names the
+// consumption tax the same way on a received eRačun; an issuer charges it
+// with the hr regime's PP tax category on its lines.
+const (
+	TaxLabelPDV25  cbc.Code = "PDV25"
+	TaxLabelPDV13  cbc.Code = "PDV13"
+	TaxLabelPDV5   cbc.Code = "PDV5"
+	TaxLabelZ      cbc.Code = "Z"
+	TaxLabelK      cbc.Code = "K"
+	TaxLabelG      cbc.Code = "G"
+	TaxLabelAE     cbc.Code = "AE"
+	TaxLabelE      cbc.Code = "E"
+	TaxLabelPOVNAK cbc.Code = "POVNAK"
+	TaxLabelPP     cbc.Code = "PP"
+	TaxLabelPPMV   cbc.Code = "PPMV"
+	TaxLabelO      cbc.Code = "O"
+	TaxLabelN      cbc.Code = "N"
+)
+
+// Rejection reasons (VRSTARAZLOGAODBIJANJA)
+const (
+	RejectionReasonN cbc.Code = "N"
+	RejectionReasonU cbc.Code = "U"
+	RejectionReasonO cbc.Code = "O"
+)
+
+// PassThroughTaxLabels are the labels of amounts left out of the VAT base:
+// POVNAK, PP and PPMV, which the supplier collects for a third party, and N,
+// any other fee that is not taxed. The HR CIUS writes them as exempt (E) in
+// the EN 16931 core and outside the VAT base (O) in the HR extension.
+var PassThroughTaxLabels = []cbc.Code{
+	TaxLabelPOVNAK, TaxLabelPP, TaxLabelPPMV, TaxLabelN,
+}
+
+var extensions = []*cbc.Definition{
+	{
+		Key: ExtKeyProcess,
+		Name: i18n.String{
+			i18n.EN: "Business Process",
+			i18n.HR: "Oznaka procesa",
+		},
+		Desc: i18n.String{
+			i18n.EN: here.Doc(`
+				Business process of the invoice (BT-23): one of the codes P1 to P12
+				defined by the HR CIUS, or P99 followed by a colon and a label agreed
+				with the buyer, such as "P99:Narudžba".
+			`),
+		},
+		// HR-BR-34, and at most 200 characters (HR-BR-42).
+		Pattern: `^(P[1-9]|P1[0-2]|P99:.{1,196})$`,
+	},
+	{
+		Key: ExtKeyTaxCategory,
+		Name: i18n.String{
+			i18n.EN: "HR Tax Category",
+			i18n.HR: "HR oznaka kategorije PDV-a",
+		},
+		Desc: i18n.String{
+			i18n.EN: here.Doc(`
+				HR tax category (HR-TB-2). On a VAT combo it is set automatically
+				from the tax key and rate. An amount left out of the VAT base, one
+				collected for a third party (POVNAK, PPMV) or any other fee that
+				is not taxed (N), is a line or a document level charge without
+				taxes, and has the category in its own extensions. PP there is how
+				a received eRačun carries the consumption tax.
+			`),
+		},
+		Values: []*cbc.Definition{
+			{Code: TaxLabelPDV25, Name: i18n.String{i18n.EN: "VAT 25%", i18n.HR: "PDV 25%"}},
+			{Code: TaxLabelPDV13, Name: i18n.String{i18n.EN: "VAT 13%", i18n.HR: "PDV 13%"}},
+			{Code: TaxLabelPDV5, Name: i18n.String{i18n.EN: "VAT 5%", i18n.HR: "PDV 5%"}},
+			{Code: TaxLabelZ, Name: i18n.String{i18n.EN: "Zero rated", i18n.HR: "Nulta stopa"}},
+			{Code: TaxLabelK, Name: i18n.String{i18n.EN: "Intra-community supply", i18n.HR: "Isporuka unutar EU"}},
+			{Code: TaxLabelG, Name: i18n.String{i18n.EN: "Export", i18n.HR: "Izvoz"}},
+			{Code: TaxLabelAE, Name: i18n.String{i18n.EN: "Reverse charge", i18n.HR: "Prijenos porezne obveze"}},
+			{Code: TaxLabelE, Name: i18n.String{i18n.EN: "Exempt", i18n.HR: "Oslobođeno PDV-a"}},
+			{Code: TaxLabelPOVNAK, Name: i18n.String{i18n.EN: "Packaging return fee", i18n.HR: "Povratna naknada"}},
+			{Code: TaxLabelPP, Name: i18n.String{i18n.EN: "Consumption tax", i18n.HR: "Porez na potrošnju"}},
+			{Code: TaxLabelPPMV, Name: i18n.String{i18n.EN: "Special tax on motor vehicles", i18n.HR: "Posebni porez na motorna vozila"}},
+			{Code: TaxLabelO, Name: i18n.String{i18n.EN: "Not subject to VAT", i18n.HR: "Neoporezivo"}},
+			{Code: TaxLabelN, Name: i18n.String{i18n.EN: "Non-taxable fee", i18n.HR: "Neoporeziva naknada"}},
+		},
+	}, {
+		Key: ExtKeyVATStatus,
+		Name: i18n.String{
+			i18n.EN: "VAT Status",
+			i18n.HR: "Status u sustavu PDV-a",
+		},
+		Desc: i18n.String{
+			i18n.EN: here.Doc(`
+				Whether the supplier is registered for VAT. Every invoice says it
+				on its supplier, since the supplier's tax ID holds its OIB either
+				way. A supplier that is not registered, such as a small taxpayer,
+				charges no VAT.
+			`),
+		},
+		Values: []*cbc.Definition{
+			{Code: VATStatusRegistered, Name: i18n.String{i18n.EN: "Registered for VAT", i18n.HR: "U sustavu PDV-a"}},
+			{Code: VATStatusNotRegistered, Name: i18n.String{i18n.EN: "Not registered for VAT", i18n.HR: "Nije u sustavu PDV-a"}},
+		},
+	}, {
+		Key: ExtKeyRejectionReason,
+		Name: i18n.String{
+			i18n.EN: "Rejection Reason",
+			i18n.HR: "Vrsta razloga odbijanja",
+		},
+		Desc: i18n.String{
+			i18n.EN: here.Doc(`
+				Kind of reason for rejecting an invoice (AR-BT-12), reported to the
+				Tax Administration with the same code.
+			`),
+		},
+		Values: []*cbc.Definition{
+			{Code: RejectionReasonN, Name: i18n.String{
+				i18n.EN: "Data mismatch that does not affect the tax calculation",
+				i18n.HR: "Neusklađenost podataka koji ne utječu na obračun poreza",
+			}},
+			{Code: RejectionReasonU, Name: i18n.String{
+				i18n.EN: "Data mismatch that affects the tax calculation",
+				i18n.HR: "Neusklađenost podataka koji utječu na obračun poreza",
+			}},
+			{Code: RejectionReasonO, Name: i18n.String{
+				i18n.EN: "Other",
+				i18n.HR: "Ostalo",
+			}},
+		},
+	},
+}
